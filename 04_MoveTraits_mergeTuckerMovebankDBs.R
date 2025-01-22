@@ -101,6 +101,7 @@ db.movebank.sp2 <- db.movebank.sp %>%
   mutate(source = "Movebank.06.2024") |> 
   filter(include == "yes") |> 
   dplyr::select(-include)
+  
 
 
 ##
