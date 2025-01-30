@@ -42,13 +42,6 @@ We only used data from 2019 (i.e., not from 2020 during COVID lockdowns).
 pathTOfolder <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/CODE_DATABASE/Movebankdata_df_v0.1/"
 
 movedata <- readRDS(paste0(pathTOfolder,"combined.df3.rds"))
-
-# filter duplicates
-# tr <- tr %>% mt_filter_unique()
-# tr.df <- mt_as_event_attribute(tr, names(mt_track_data(tr)))
-# tr.df <- dplyr::mutate(tr.df, coords_x=sf::st_coordinates(tr.df)[,1], coords_y=sf::st_coordinates(tr.df)[,2])
-# tr.df <- sf::st_drop_geometry(tr.df)
-# movedata <- data.frame(tr.df)
 ```
 
 ```{r}
@@ -157,7 +150,7 @@ locs1h <- flatten(data_resampled[,"animlocs.1hourly"]) %>%  bind_rows() %>% tibb
 locs1h <- locs1h %>% filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% filter(!is.na(t_)) %>% filter(!is.na(id))
 
 coordinates(locs1h) <- c("x_","y_")
-proj4string(locs1h) <- CRS("+init=epsg:4326")
+proj4string(locs1h) <- CRS("EPSG:4326")
 ```
 
 We use the adehabitatLT package to create a regular tarjectory, i.e. distances are only calculated for subseqeunt GPS positions.
@@ -205,7 +198,7 @@ locs1h <- locs1h %>%
         dplyr::select(id.YMD, mean.x, mean.y) |> distinct()
 
 coordinates(locs1h) <- c("x_","y_")
-proj4string(locs1h) <- CRS("+init=epsg:4326")
+proj4string(locs1h) <- CRS("EPSG:4326")
 
 mydata <- split(locs1h, list(locs1h$id, locs1h$YMD), drop = TRUE) 
 
@@ -245,7 +238,7 @@ locs24h <- flatten(data_resampled[,"animlocs.daily"]) %>% bind_rows() %>% tibble
 locs24h <- locs24h %>% filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% filter(!is.na(t_)) %>% filter(!is.na(id))
 
 coordinates(locs24h) <- c("x_","y_")
-proj4string(locs24h) <- CRS("+init=epsg:4326")
+proj4string(locs24h) <- CRS("EPSG:4326")
 
 ## create a regular 24 hr trajectory and calculate step lengths in adehabitat
 traj.24h<-as.ltraj(xy = coordinates(locs24h),
@@ -265,7 +258,8 @@ df.traj.24h$D24h <- df.traj.24h$D24h*100000
 
 #remove missing hourly steps
 df.traj.24h <- df.traj.24h[!is.na(df.traj.24h$D24h),]
-df.traj.24h$Month <- sprintf("%02d", lubridate::month(df.traj.24h$TimestampUTC))
+#df.traj.24h$Month <- sprintf("%02d", lubridate::month(df.traj.24h$TimestampUTC)) # Check
+df.traj.24h$Month <- lubridate::month(df.traj.24h$TimestampUTC)
 df.traj.24h$OrdinalDay <- lubridate::yday(df.traj.24h$TimestampUTC)
 df.traj.24h$JulianDay <- as.numeric(julian(as.Date(df.traj.24h$TimestampUTC)))
 df.traj.24h$Year <- lubridate::year(df.traj.24h$TimestampUTC)
@@ -295,7 +289,7 @@ locs24h <- locs24h %>%
         dplyr::select(id.year_week, mean.x, mean.y) |> distinct()
 
 coordinates(locs24h) <- c("x_","y_")
-proj4string(locs24h) <- CRS("+init=epsg:4326")
+proj4string(locs24h) <- CRS("EPSG:4326")
 
 mydata <- split(locs24h, list(locs24h$id, locs24h$year_week), drop = TRUE)
 
@@ -341,7 +335,7 @@ locs7d <- locs7d %>%
         dplyr::select(id.year, mean.x, mean.y) |> distinct()
 
 coordinates(locs7d) <- c("x_","y_")
-proj4string(locs7d) <- CRS("+init=epsg:4326")
+proj4string(locs7d) <- CRS("EPSG:4326")
 
 mydata <- split(locs7d, list(locs7d$id, locs7d$year), drop = TRUE)
 
@@ -384,7 +378,7 @@ dat.mcp.daily <- flatten(data_resampled[,"animlocs.1hourly"]) %>% bind_rows() %>
         dplyr::select(id.day, mean.x, mean.y) |> distinct()
 
 coordinates(dat.mcp.daily) <- c("x_","y_")
-proj4string(dat.mcp.daily) <- CRS("+init=epsg:4326")
+proj4string(dat.mcp.daily) <- CRS("EPSG:4326")
 
 # Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
 # "+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"
@@ -408,7 +402,7 @@ Weekly range size based on 1h data with at least 84 hourly relocations (3.5 days
 dat.mcp.weekly <- flatten(data_resampled[,"animlocs.1hourly"]) %>% bind_rows() %>%  tibble() %>% 
  mutate(week = as.numeric(strftime(t_,format="%W")), 
         year = as.numeric(strftime(t_,format="%Y")),
-         year_week = paste(year,week, sep="_")) %>% 
+        year_week = paste(year,week, sep="_")) %>% 
   mutate(id.week = paste(id,year_week,sep=".")) %>% 
   filter(!is.na(x_)) %>% filter(!is.na(y_)) %>%
   group_by(id.week) %>% filter(n() > 84) %>% ungroup() %>% 
@@ -420,7 +414,7 @@ dat.mcp.weekly <- flatten(data_resampled[,"animlocs.1hourly"]) %>% bind_rows() %
         dplyr::select(id.week, mean.x, mean.y) |> distinct()
 
 coordinates(dat.mcp.weekly) <- c("x_","y_")
-proj4string(dat.mcp.weekly) <- CRS("+init=epsg:4326")
+proj4string(dat.mcp.weekly) <- CRS("EPSG:4326")
 
 # Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
 dat.mcp.weekly <- spTransform(dat.mcp.weekly,
@@ -452,7 +446,7 @@ dat.mcp.monthly <- flatten(data_resampled[,"animlocs.daily"]) %>% bind_rows() %>
         dplyr::select(id.month, mean.x, mean.y) |> distinct()
 
 coordinates(dat.mcp.monthly) <- c("x_","y_")
-proj4string(dat.mcp.monthly) <- CRS("+init=epsg:4326")
+proj4string(dat.mcp.monthly) <- CRS("EPSG:4326")
 
 # Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
 dat.mcp.monthly <- spTransform(dat.mcp.monthly,sp::CRS("+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
@@ -480,7 +474,7 @@ dat.mcp.annual <- flatten(data_resampled[,"animlocs.weekly"]) %>% bind_rows() %>
         dplyr::select(id.year, mean.x, mean.y) |> distinct()
 
 coordinates(dat.mcp.annual) <- c("x_","y_")
-proj4string(dat.mcp.annual) <- CRS("+init=epsg:4326")
+proj4string(dat.mcp.annual) <- CRS("EPSG:4326")
 
 # Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
 dat.mcp.annual <- spTransform(dat.mcp.annual,sp::CRS("+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
@@ -951,7 +945,7 @@ DI.12m <- FSumDI(DI)
 ```
 
 Function to summarize Diurnality Index - May - October
-```{r function to summarize IoU1m, class.source = 'fold-hide'}
+```{r function to summarize DI05-10, class.source = 'fold-hide'}
 FSumDI.MayOct<-function(x){
   ID <- with(x, tapply(as.character(x$ID),ID, unique))
   
@@ -981,7 +975,7 @@ DI.MayOct <- FSumDI.MayOct(DI.MayOct)
 ```
 
 Function to summarize Diurnality Index - Nov - April
-```{r function to summarize IoU1m, class.source = 'fold-hide'}
+```{r function to summarize DI11-04, class.source = 'fold-hide'}
 FSumDI.NovApr<-function(x){
   ID <- with(x, tapply(as.character(x$ID),ID, unique))
   
