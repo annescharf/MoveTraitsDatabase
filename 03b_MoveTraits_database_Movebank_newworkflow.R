@@ -4,8 +4,8 @@
 # date: "28/1/2025"
 # ---
 
-library(lubridate);library(metafor);library(tidyverse);library(amt);library(adehabitatLT);
-library(adehabitatHR); library(move2); library(epitools); library(suncalc)
+library(lubridate);library(metafor);library(tidyverse);library(amt);
+library(adehabitatHR); library(move2); library(epitools); library(suncalc); library(purrr)
 
 ## ----Import movement data per individual-------------------------------------------------------------
 pathTOfolder <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/CODE_DATABASE/Movebankdata_df_v0.1/"
@@ -324,7 +324,7 @@ df.IoU1m <- animlocs.daily_sl  %>%
   left_join(mcp.monthly[,c("id_month","area")],by = "id_month")  |>  
   mutate(iou1m = cumsum.d24h/sqrt(area))  |>  
   filter(!is.na(iou1m)) |> ungroup() |> 
-  dplyr::select(individual_id,month,year,mean.x,mean.y,cumsum.d24h,area,iou1m)  
+  dplyr::select(individual_id,month,year,year_month,mean.x,mean.y,cumsum.d24h,area,iou1m)  
   
 ## ----Annual IOU-------------------------------------------------------------
 df.IoU12m <- animlocs.daily_sl  |>   
@@ -417,6 +417,7 @@ FDispl1h<-function(x){
 }
 
 Displ1h <- FDispl1h(animlocs.1hourly_sl[,c("individual_id","t_","d1h")])
+Displ1h <- Displ1h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function Max24h Displacements------
 FMaxDispl24h<-function(x){
@@ -439,6 +440,7 @@ FMaxDispl24h<-function(x){
   return(dats)
 }
 MaxDispl24h <- FMaxDispl24h(dmax24)
+MaxDispl24h <- MaxDispl24h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize 24h Displacements---------
 FDispl24h<-function(x){
@@ -462,6 +464,7 @@ FDispl24h<-function(x){
   return(dats)
 }
 Displ24h <- FDispl24h(animlocs.daily_sl[,c("individual_id","t_","d24h")])
+Displ24h <- Displ24h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize Max7d Displacements-------
 FMaxDispl7d<-function(x){
@@ -484,6 +487,7 @@ FMaxDispl7d<-function(x){
   return(dats)
 }
 MaxDispl7d <- FMaxDispl7d(dmax7d)
+MaxDispl7d <- MaxDispl7d %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize Max12m Displacements------
 FMaxDispl12m<-function(x){
@@ -506,74 +510,75 @@ FMaxDispl12m<-function(x){
   return(dats)
 }
 MaxDispl12m <- FMaxDispl12m(dmax12m)
+MaxDispl12m <- MaxDispl12m %>% mutate(individual_id = as.character(individual_id))
 
-#' Function to summarize 1d MCP
-## ----function to summarize 1d MCP, class.source = 'fold-hindividual_ide'--------------------
+## ----function to summarize 1d MCP--------------------
 FSumMCP1d<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
-  n.MCP24h.days<-as.numeric(with(x, tapply(x$individual_id,individual_id, length)))
+  n.mcp24h.days<-as.numeric(with(x, tapply(x$individual_id,individual_id, length)))
   
   # 24MCP Displacement
-  MCP24h.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
-  MCP24h.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
-  MCP24h.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  MCP24h.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
-  MCP24h.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
+  mcp24h.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
+  mcp24h.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
+  mcp24h.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  mcp24h.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
+  mcp24h.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(individual_id,n.MCP24h.days,
-                   MCP24h.mean,MCP24h.median,MCP24h.cv,MCP24h.95,MCP24h.05)
+  dats<-data.frame(individual_id,n.mcp24h.days,
+                   mcp24h.mean,mcp24h.median,mcp24h.cv,mcp24h.95,mcp24h.05)
   
   return(dats)
 }
 MCP24h <- FSumMCP1d(mcp.daily)
+MCP24h <- MCP24h %>% mutate(individual_id = as.character(individual_id))
 
-#' 
-#' Function to summarize 7d MCP
-## ----function to summarize 7d MCP, class.source = 'fold-hindividual_ide'--------------------
+## ----function to summarize 7d MCP--------------------
 FSumMCP7d<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
-  n.MCP7d.weeks<-as.numeric(with(x, tapply(x$year_week,individual_id, length)))
+  n.mcp7d.weeks<-as.numeric(with(x, tapply(x$year_week,individual_id, length)))
   
-  # 24MCP Displacement
-  MCP7d.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
-  MCP7d.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
-  MCP7d.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  MCP7d.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
-  MCP7d.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
+  # 24mcp Displacement
+  mcp7d.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
+  mcp7d.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
+  mcp7d.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  mcp7d.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
+  mcp7d.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(individual_id,n.MCP7d.weeks,
-                   MCP7d.mean,MCP7d.median,MCP7d.cv,MCP7d.95,MCP7d.05)
+  dats<-data.frame(individual_id,n.mcp7d.weeks,
+                   mcp7d.mean,mcp7d.median,mcp7d.cv,mcp7d.95,mcp7d.05)
   
   return(dats)
 }
 MCP7d <- FSumMCP7d(mcp.weekly)
+MCP7d <- MCP7d %>% mutate(individual_id = as.character(individual_id))
 
-#' Function to summarize 1m MCP
+## ----function to summarize 1m MCP--------------------
 FSumMCP1m<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
 
-  n.MCP1m.months<-as.numeric(with(x, tapply(x$year_month,individual_id, length)))
+  n.mcp1m.months<-as.numeric(with(x, tapply(x$year_month,individual_id, length)))
   
-  MCP1m.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
-  MCP1m.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
-  MCP1m.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  MCP1m.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
-  MCP1m.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
+  mcp1m.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
+  mcp1m.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
+  mcp1m.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  mcp1m.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
+  mcp1m.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
   
-  dats<-data.frame(individual_id,n.MCP1m.months,
-                   MCP1m.mean,MCP1m.median,MCP1m.cv,MCP1m.95,MCP1m.05)
+  dats<-data.frame(individual_id,n.mcp1m.months,
+                   mcp1m.mean,mcp1m.median,mcp1m.cv,mcp1m.95,mcp1m.05)
   
   return(dats)
 }
 MCP1m <- FSumMCP1m(mcp.monthly)
+MCP1m <- MCP1m %>% mutate(individual_id = as.character(individual_id))
 
-#' Function to summarize 12m MCP
+## ----function to summarize 12m MCP--------------------
 FSumMCP12m<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
 
@@ -591,110 +596,115 @@ FSumMCP12m<-function(x){
   return(dats)
 }
 MCP12m <- FSumMCP12m(mcp.annual)
+MCP12m <- MCP12m %>% mutate(individual_id = as.character(individual_id))
 
-#' Function to summarize IoU24h
+## ----function to summarize IoU24h--------------------
 FSumIOU24h<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
-  n.IOU24h.days<-as.numeric(with(x, tapply(x$YMD,individual_id, length)))
+  n.iou24h.days<-as.numeric(with(x, tapply(x$ymd,individual_id, length)))
   
   # 24hr Displacement
-  IOU24h.mean<-as.numeric(with(x, tapply(x$IOU24h+0.001,individual_id, mean, na.rm=T)))
-  IOU24h.median<-as.numeric(with(x, tapply(x$IOU24h+0.001,individual_id, median, na.rm=T)))
-  IOU24h.cv<-as.numeric(with(x, tapply(x$IOU24h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  IOU24h.95<-as.numeric(with(x, tapply(x$IOU24h+0.001,individual_id, quantile,.95, na.rm=T)))
-  IOU24h.05<-as.numeric(with(x, tapply(x$IOU24h+0.001,individual_id, quantile,.05, na.rm=T)))
+  iou24h.mean<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, mean, na.rm=T)))
+  iou24h.median<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, median, na.rm=T)))
+  iou24h.cv<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  iou24h.95<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, quantile,.95, na.rm=T)))
+  iou24h.05<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(individual_id,n.IOU24h.days,
-                   IOU24h.mean,IOU24h.median,IOU24h.cv,IOU24h.95,IOU24h.05)
+  dats<-data.frame(individual_id,n.iou24h.days,
+                   iou24h.mean,iou24h.median,iou24h.cv,iou24h.95,iou24h.05)
   
   return(dats)
 }
-IOU24h <- FSumIOU24h(df.IoU24h)
 
-#' Function to summarize IoU1m
+IOU24h <- FSumIOU24h(df.IoU24h)
+IOU24h <- IOU24h %>% mutate(individual_id = as.character(individual_id))
+
+## ----function to summarize IoU1m--------------------
 FSumIOU1m<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
-  n.IOU1m.month<-as.numeric(with(x, tapply(x$year_month,individual_id, length)))
+  n.iou1m.month<-as.numeric(with(x, tapply(x$year_month,individual_id, length)))
   
   # 24hr Displacement
-  IOU1m.mean<-as.numeric(with(x, tapply(x$IOU1m+0.001,individual_id, mean, na.rm=T)))
-  IOU1m.median<-as.numeric(with(x, tapply(x$IOU1m+0.001,individual_id, median, na.rm=T)))
-  IOU1m.cv<-as.numeric(with(x, tapply(x$IOU1m+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  IOU1m.95<-as.numeric(with(x, tapply(x$IOU1m+0.001,individual_id, quantile,.95, na.rm=T)))
-  IOU1m.05<-as.numeric(with(x, tapply(x$IOU1m+0.001,individual_id, quantile,.05, na.rm=T)))
+  iou1m.mean<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, mean, na.rm=T)))
+  iou1m.median<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, median, na.rm=T)))
+  iou1m.cv<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  iou1m.95<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, quantile,.95, na.rm=T)))
+  iou1m.05<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(individual_id,n.IOU1m.month,
-                   IOU1m.mean,IOU1m.median,IOU1m.cv,IOU1m.95,IOU1m.05)
+  dats<-data.frame(individual_id,n.iou1m.month,
+                   iou1m.mean,iou1m.median,iou1m.cv,iou1m.95,iou1m.05)
   
   return(dats)
 }
-IOU1m <- FSumIOU1m(df.IoU1m)
 
-#' Function to summarize IoU12m
+IOU1m <- FSumIOU1m(df.IoU1m)
+IOU1m <- IOU1m %>% mutate(individual_id = as.character(individual_id))
+
+## ----function to summarize IoU12m--------------------
+
 FSumIOU12m<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
-  n.IOU12m.year<-as.numeric(with(x, tapply(x$year,individual_id, length)))
+  n.iou12m.year<-as.numeric(with(x, tapply(x$year,individual_id, length)))
   
   # 24hr Displacement
-  IOU12m.mean<-as.numeric(with(x, tapply(x$IOU12m+0.001,individual_id, mean, na.rm=T)))
-  IOU12m.median<-as.numeric(with(x, tapply(x$IOU12m+0.001,individual_id, median, na.rm=T)))
-  IOU12m.cv<-as.numeric(with(x, tapply(x$IOU12m+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  IOU12m.95<-as.numeric(with(x, tapply(x$IOU12m+0.001,individual_id, quantile,.95, na.rm=T)))
-  IOU12m.05<-as.numeric(with(x, tapply(x$IOU12m+0.001,individual_id, quantile,.05, na.rm=T)))
+  iou12m.mean<-as.numeric(with(x, tapply(x$iou12m+0.001,individual_id, mean, na.rm=T)))
+  iou12m.median<-as.numeric(with(x, tapply(x$iou12m+0.001,individual_id, median, na.rm=T)))
+  iou12m.cv<-as.numeric(with(x, tapply(x$iou12m+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  iou12m.95<-as.numeric(with(x, tapply(x$iou12m+0.001,individual_id, quantile,.95, na.rm=T)))
+  iou12m.05<-as.numeric(with(x, tapply(x$iou12m+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(individual_id,n.IOU12m.year,
-                   IOU12m.mean,IOU12m.median,IOU12m.cv,IOU12m.95,IOU12m.05)
+  dats<-data.frame(individual_id,n.iou12m.year,
+                   iou12m.mean,iou12m.median,iou12m.cv,iou12m.95,iou12m.05)
   
   return(dats)
 }
 IOU12m <- FSumIOU12m(data.frame(df.IoU12m))
+IOU12m <- IOU12m %>% mutate(individual_id = as.character(individual_id))
 
-#' Function to summarize Diurnality Index - 12 month
+## ----function to summarize Diurnality Index--------------------
 FSumDI<-function(x){
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # How many days per indivindividual_idual
-  n.DI.days<-as.numeric(with(x, tapply(x$YMD,individual_id, length)))
+  n.di.days<-as.numeric(with(x, tapply(x$ymd,individual_id, length)))
   
   # Diurnality
-  DI.mean<-as.numeric(with(x, tapply(x$Diurn,individual_id, mean, na.rm=T)))
-  DI.median<-as.numeric(with(x, tapply(x$Diurn,individual_id, median, na.rm=T)))
-  DI.cv<-as.numeric(with(x, tapply(x$Diurn,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  DI.95<-as.numeric(with(x, tapply(x$Diurn,individual_id, quantile,.95, na.rm=T)))
-  DI.05<-as.numeric(with(x, tapply(x$Diurn,individual_id, quantile,.05, na.rm=T)))
+  di.mean<-as.numeric(with(x, tapply(x$diurnality,individual_id, mean, na.rm=T)))
+  di.median<-as.numeric(with(x, tapply(x$diurnality,individual_id, median, na.rm=T)))
+  di.cv<-as.numeric(with(x, tapply(x$diurnality,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  di.95<-as.numeric(with(x, tapply(x$diurnality,individual_id, quantile,.95, na.rm=T)))
+  di.05<-as.numeric(with(x, tapply(x$diurnality,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(individual_id,n.DI.days,
-                   DI.mean,DI.median,DI.cv,DI.95,DI.05)
+  dats<-data.frame(individual_id,n.di.days,
+                   di.mean,di.median,di.cv,di.95,di.05)
   
   return(dats)
 }
 
-DI <- DI[!is.na(DI$Diurn),]
-DI.12m <- FSumDI(DI)
+DI.12 <- FSumDI(DI)
+DI.12 <- DI.12 %>% mutate(individual_id = as.character(individual_id))
 
-
-#' # Build database with summary values
-
+## ----Build database with summary values--------------------
+#' ## PROBLEM - this does not work when some metrics could not be computed
 MoveTrait.v0 <- full_join(Displ1h, full_join(Displ24h, full_join(MaxDispl24h, 
              full_join(MaxDispl7d, full_join(MaxDispl12m, full_join(MCP24h, 
-             full_join(MCP7d, 
-             full_join(MCP1m, full_join(MCP12m, full_join(IOU24h, 
-             full_join(IOU1m, full_join(IOU12m, DI.12m))))))))))))
+             full_join(MCP7d, full_join(MCP1m, full_join(MCP12m, full_join(IOU24h, 
+             full_join(IOU1m, full_join(IOU12m, DI.12))))))))))))
 
 library(bit64)
 movedata2 <- movedata %>% 
   mutate(study_individual_id = as.integer64(study_individual_id),
-         individual_id = indivindividual_idual_individual_id,
+         individual_id = individual_id,
          Species = taxon_canonical_name,
          BodyMass_g = animal_mass,
          Sex = sex,
@@ -711,25 +721,22 @@ movedata2 %>%
   left_join(MoveTrait.v0, by = "individual_id") %>% 
   droplevels()
 
-#' There are still list elements in teh metadata - only keep first element!
-## --------------------------------------------------------------------------------
-library(dplyr)
-library(purrr)
+#' There are still list elements in the metadata - only keep first element!
 DBMoveTrait.v02 <-
 DBMoveTrait.v02 %>%
     mutate(Lifestage = map_chr(Lifestage, first),
            BodyMass_g = map_chr(BodyMass_g, first))
 
-#DBMoveTrait.v02[651,"BodyMass_g"] <-NA
 DBMoveTrait.v02$BodyMass_g <- as.numeric(DBMoveTrait.v02$BodyMass_g)
 
+## ----Save database with summaries--------------------
+pathfolder_summary <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/output_movebank/trait_summaries/"
 saveRDS(DBMoveTrait.v02,
-        "CODE_DATABASE/Database_Tucker_MovebankV0.1/MoveTraitsDB.v0.1_movebankIV.rds")
-write.csv(DBMoveTrait.v02,
-          "CODE_DATABASE/Database_Tucker_MovebankV0.1/MoveTraitsDB.v0.1_movebankIV.csv",row.names=F)
+        paste0(pathfolder_summary,DBMoveTrait.v02$individual_id,".rds"))  
 
-#' # Build full database including raw data
-# Create the full data set with hourly and daily relocation intervals
+
+## ----Build full database including raw metrics data--------------------
+
 MoveTrait.v0_spatial <- 
   DBMoveTrait.v02 %>%
   tindividual_idyr::nest(-individual_id) %>% 
@@ -768,7 +775,7 @@ MoveTrait.v0_spatial <-
 
   # Dmax12m
   left_join(.,  dmax12m %>%
-              dplyr::select("individual_id","year","Dmax12m","mean.x", "mean.y") %>% 
+              dplyr::select("individual_id","year","dmax12m","mean.x", "mean.y") %>% 
               tindividual_idyr::nest(-individual_id), 
             by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(MaxDispl.12m = data) %>% 
@@ -832,7 +839,7 @@ MoveTrait.v0_spatial <-
             by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(Diurnality = data) 
 
+## ----Save full database including raw metrics data--------------------
 pathfolder_spatial <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/movebank/trait_summaries_spatial/"
-
 saveRDS(MoveTrait.v0_spatial,paste0(pathfolder_spatial,MoveTrait.v0_spatial$individual_id,".rds"))  
 
