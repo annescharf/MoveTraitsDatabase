@@ -15,8 +15,10 @@ pathTOfolder <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/C
   #saveRDS(animlocs.1hourly,paste0(pathTOfolder,"try_2190902582",".rds"))
   #saveRDS(animlocs.1hourly,paste0(pathTOfolder,"try_2298755403",".rds"))
 
-animlocs.1hourly <- readRDS(paste0(pathTOfolder,"try_2190902582",".rds"))
-#animlocs.1hourly <- readRDS(paste0(pathTOfolder,"try_2298755403",".rds"))
+movedata <- readRDS(paste0(pathTOfolder,"try_2190902582",".rds"))
+#movedata <- readRDS(paste0(pathTOfolder,"try_2298755403",".rds"))
+
+animlocs.1hourly <- movedata
 
 ## ----Resample data-------------------------------------------------------------
 #Resample data to 24h, 7 week time scales using amt
@@ -473,7 +475,7 @@ FDispl1h<-function(x)
   n1h<-as.numeric(with(x, tapply(as.character(x$t_),individual_id, length)))
   
    # 1hr Displacement
-  dh.mean <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, mean, na.rm=T)))
+  d1h.mean <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, mean, na.rm=T)))
   d1h.median <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, median, na.rm=T)))
   d1h.cv <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
   d1h.95 <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, quantile,.95, na.rm=T)))
@@ -829,7 +831,7 @@ FSumIOU12m<-function(x)
   return(dats)
   }}
 
-IOU12m <- FSumIOU12m(data.frame(df.IoU12m))
+IOU12m <- FSumIOU12m(df.IoU12m)
 
 ## ----function to summarize Diurnality Index--------------------
 FSumDI<-function(x)
@@ -862,7 +864,6 @@ FSumDI<-function(x)
   }
 
 DI.12 <- FSumDI(DI)
-DI.12 <- DI.12 %>% mutate(individual_id = as.character(individual_id))
 
 ## ----Build database with summary values--------------------
 #' ## PROBLEM - this does not work when some metrics could not be computed
@@ -883,16 +884,16 @@ MoveTrait.v0 <- full_join(Displ1h,
 
 library(bit64)
 movedata2 <- movedata %>% 
-  mutate(study_individual_id = as.integer64(study_individual_id),
+  mutate(study_id = as.integer64(study_id),
          individual_id = individual_id,
          species = taxon_canonical_name,
          bodymass_g = animal_mass,
          sex = sex,
          lifestage = animal_life_stage) |> 
   group_by(individual_id) %>% 
-  mutate(mean.longitude = mean(coords_x,na.rm=T),
-         mean.latitude = mean(coords_y,na.rm=T)) %>% 
-  dplyr::select(study_individual_id,individual_id,species,bodymass_g,sex,lifestage,mean.longitude,mean.latitude) %>% 
+  mutate(mean.longitude = mean(x_,na.rm=T),
+         mean.latitude = mean(y_,na.rm=T)) %>% 
+  dplyr::select(study_id,individual_id,species,bodymass_g,sex,lifestage,mean.longitude,mean.latitude) %>% 
   mutate(individual_id = as.character(individual_id)) %>% 
   distinct()
 
@@ -905,7 +906,7 @@ movedata2 %>%
 DBMoveTrait.v02 <-
 DBMoveTrait.v02 %>%
     mutate(lifestage = map_chr(lifestage, first),
-           bodymass_g = map_chr(bodyMass_g, first))
+           bodymass_g = map_chr(bodymass_g, first))
 
 DBMoveTrait.v02$bodymass_g <- as.numeric(DBMoveTrait.v02$bodymass_g)
 
@@ -918,91 +919,104 @@ DBMoveTrait.v02$bodymass_g <- as.numeric(DBMoveTrait.v02$bodymass_g)
 
 MoveTrait.v0_spatial <- 
   DBMoveTrait.v02 %>%
-  tindividual_idyr::nest(-individual_id) %>% 
+  tidyr::nest(data = -individual_id) %>% 
   dplyr::select(-data) %>% # just a quick trick to keep things flowing.
-  left_join(., DBMoveTrait.v02[!duplicated(DBMoveTrait.v02$individual_id),1:98], 
+  left_join(., DBMoveTrait.v02[!duplicated(DBMoveTrait.v02$individual_id)], 
             by = c("individual_id" = "individual_id")) %>% 
   
   # 1 hourly
-  {if (!is.null(dmax12m)) left_join(.,  animlocs.1hourly_sl %>%
-              data.frame %>% 
-              dplyr::select("individual_id","t_","d1h","x","y") %>% 
-              tindividual_idyr::nest(Displ.1h = -individual_id), 
-            by = c("individual_id" = "individual_id"))  else .} |> 
+  {if (!is.null(animlocs.1hourly_sl)) left_join(.,  animlocs.1hourly_sl %>%
+                                    data.frame %>%
+                                    mutate(individual_id = as.character(individual_id)) %>%
+                                    dplyr::select("individual_id","t_","d1h","x_","y_") %>% 
+                tidyr::nest(Displ.1h = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
   
   # 24 hourly
-  {if (!is.null(dmax12m)) left_join(.,  animlocs.daily_sl %>%
-              dplyr::select("individual_id","t_","d24h","x","y") %>% 
-              tindividual_idyr::nest(Displ.24h = -individual_id), 
+  {if (!is.null(animlocs.daily_sl)) left_join(.,  animlocs.daily_sl %>%
+                                    mutate(individual_id = as.character(individual_id)) %>%
+                                    dplyr::select("individual_id","t_","d24h","x_","y_") %>% 
+                tidyr::nest(Displ.24h = -individual_id), 
             by = c("individual_id" = "individual_id")) else .}  %>% 
   
   # Dmax24
   {if (!is.null(dmax12m)) left_join(.,  dmax24 %>%
-              dplyr::select("individual_id","ymd","dmax24","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(MaxDispl.24h = -individual_id), 
+                                    mutate(individual_id = as.character(individual_id)) %>%
+                                    dplyr::select("individual_id","ymd","dmax24","mean.x", "mean.y") %>% 
+            tidyr::nest(MaxDispl.24h = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
   
   # Dmax7d
-  {if (!is.null(dmax12m)) left_join(.,  dmax7d %>%
-              dplyr::select("individual_id","week","year_week","dmax7d","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(MaxDispl.7d = -individual_id), 
+  {if (!is.null(dmax7d)) left_join(.,  dmax7d %>%
+                                     mutate(individual_id = as.character(individual_id)) %>%
+                                     dplyr::select("individual_id","week","year_week","dmax7d","mean.x", "mean.y") %>% 
+                tidyr::nest(MaxDispl.7d = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # Dmax12m
   {if (!is.null(dmax12m)) left_join(.,  dmax12m %>%
-              dplyr::select("individual_id","year","dmax12m","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(MaxDispl.12m = -individual_id), 
+                                      mutate(individual_id = as.character(individual_id)) %>%
+                                      dplyr::select("individual_id","year","dmax12m","mean.x", "mean.y") %>% 
+                tidyr::nest(MaxDispl.12m = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
   
   # mcp.daily
-  {if (!is.null(dmax12m)) left_join(.,  mcp.daily %>%
-              dplyr::select("individual_id","ymd","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(Mcp.24h = -individual_id), 
+  {if (!is.null(mcp.daily)) left_join(.,  mcp.daily %>%
+                                        mutate(individual_id = as.character(individual_id)) %>%
+                                        dplyr::select("individual_id","ymd","area","mean.x", "mean.y") %>% 
+                tidyr::nest(Mcp.24h = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
   
   # mcp.weekly
-  {if (!is.null(dmax12m)) left_join(.,  mcp.weekly %>%
-              dplyr::select("individual_id","week","year_week","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(Mcp.7d = -individual_id), 
+  {if (!is.null(mcp.weekly)) left_join(.,  mcp.weekly %>%
+                                         mutate(individual_id = as.character(individual_id)) %>%
+                                         dplyr::select("individual_id","week","year_week","area","mean.x", "mean.y") %>% 
+                tidyr::nest(Mcp.7d = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>%
   
   # mcp.monthly
-  {if (!is.null(dmax12m)) left_join(.,  mcp.monthly %>%
-              dplyr::select("individual_id","month","year_month","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(Mcp.1m = -individual_id), 
+  {if (!is.null(mcp.monthly)) left_join(.,  mcp.monthly %>%
+                                          mutate(individual_id = as.character(individual_id)) %>%
+                                          dplyr::select("individual_id","month","year_month","area","mean.x", "mean.y") %>% 
+                tidyr::nest(Mcp.1m = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # mcp.annual
-  {if (!is.null(dmax12m)) left_join(.,  mcp.annual %>%
-              dplyr::select("individual_id","year","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(Mcp.12m = -individual_id), 
+  {if (!is.null(mcp.annual)) left_join(.,  mcp.annual %>%
+                                         mutate(individual_id = as.character(individual_id)) %>%
+                                         dplyr::select("individual_id","year","area","mean.x", "mean.y") %>% 
+                tidyr::nest(Mcp.12m = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # Intensity of Use 24h
-  {if (!is.null(dmax12m)) left_join(.,  df.IoU24h %>%
+  {if (!is.null(df.IoU24h)) left_join(.,  df.IoU24h %>%
               ungroup() |>
-              dplyr::select("individual_id","ymd","iou24h","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(IoU.24h = -individual_id), 
+                mutate(individual_id = as.character(individual_id)) %>%
+                dplyr::select("individual_id","ymd","iou24h","mean.x", "mean.y") %>% 
+                tidyr::nest(IoU.24h = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # Intensity of Use 1m
-  {if (!is.null(dmax12m)) left_join(.,  df.IoU1m %>%
+  {if (!is.null(df.IoU1m)) left_join(.,  df.IoU1m %>%
               ungroup() |> 
-              dplyr::select("individual_id","month","year","iou1m","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(IoU.1m = -individual_id), 
+                mutate(individual_id = as.character(individual_id)) %>%
+                dplyr::select("individual_id","month","year","iou1m","mean.x", "mean.y") %>% 
+                tidyr::nest(IoU.1m = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # Intensity of Use 12m
-  {if (!is.null(dmax12m)) left_join(.,  df.IoU12m %>%
+  {if (!is.null(df.IoU12m)) left_join(.,  df.IoU12m %>%
               ungroup() |>
-              dplyr::select("individual_id","year","iou12m","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(IoU.12m = -individual_id), 
+                mutate(individual_id = as.character(individual_id)) %>%
+                dplyr::select("individual_id","year","iou12m","mean.x", "mean.y") %>% 
+                tidyr::nest(IoU.12m = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # Diurnality Index
-  {if (!is.null(dmax12m)) left_join(.,  DI %>%
-              dplyr::select("individual_id","ymd","diurnality","mean.x","mean.y") %>% 
-              tindividual_idyr::nest(Diurnality = -individual_id), 
+  {if (!is.null(DI)) left_join(.,  DI %>%
+                                 mutate(individual_id = as.character(individual_id)) %>%
+                                 dplyr::select("individual_id","ymd","diurnality","mean.x","mean.y") %>% 
+                tidyr::nest(Diurnality = -individual_id), 
             by = c("individual_id" = "individual_id"))  else .} 
 
 ## ----Save full database including raw metrics data--------------------
@@ -1010,5 +1024,5 @@ MoveTrait.v0_spatial <-
 #saveRDS(MoveTrait.v0_spatial,paste0(pathfolder_spatial,MoveTrait.v0_spatial$individual_id,".rds"))  
 
 
-DBMoveTrait.v02
-MoveTrait.v0_spatial
+str(MoveTrait.v0_spatial)
+
