@@ -5,19 +5,46 @@
 # ---
 
 library(lubridate);library(metafor);library(tidyverse);library(amt);
-library(adehabitatHR); library(move2); library(epitools); library(suncalc); library(purrr)
+library(adehabitatHR); library(move2); library(epitools); library(suncalc); library(purrr); library(bit64)
 
 ## ----Import movement data per individual-------------------------------------------------------------
 pathTOfolder <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/CODE_DATABASE/Movebankdata_df_v0.1/"
 
-# movedata <- readRDS(paste0(pathTOfolder,"combined.df3.rds"))
-# movedata <- movedata[movedata$individual_id %in% "2190902582",]
-# saveRDS(animlocs.1hourly,paste0(pathTOfolder,"try",".rds"))
+  #movedata <- readRDS(paste0(pathTOfolder,"combined.df3.rds"))
+  #movedata <- movedata[movedata$individual_id %in% "2190902582",] #2298755403, 2190902582
+  #saveRDS(animlocs.1hourly,paste0(pathTOfolder,"try_2190902582",".rds"))
+  #saveRDS(animlocs.1hourly,paste0(pathTOfolder,"try_2298755403",".rds"))
 
-animlocs.1hourly <- readRDS(paste0(pathTOfolder,"try",".rds"))
+animlocs.1hourly <- readRDS(paste0(pathTOfolder,"try_2190902582",".rds"))
+#animlocs.1hourly <- readRDS(paste0(pathTOfolder,"try_2298755403",".rds"))
 
 ## ----Resample data-------------------------------------------------------------
-# Resample data to 24h, 7 week time scales using amt
+#Resample data to 24h, 7 week time scales using amt
+# make_and_resample_track <- function(x, sampling.interval = 1, tolerance = 15){
+#   require(amt)
+#   make_track(x,
+#              coords_x,
+#              coords_y,
+#              timestamp,
+#              individual_id = individual_id,
+#              study_id = study_id,
+#              taxon_canonical_name = taxon_canonical_name,
+#              sex = sex,
+#              animal_mass = animal_mass,
+#              animal_life_stage = animal_life_stage,
+#              year = Year,
+#              month = Month,
+#              hour = Hour,
+#              crs = 4326) %>%
+#     track_resample(., rate = hours(sampling.interval),
+#                    tolerance = minutes(tolerance)) %>%
+#     return()
+# }
+# 
+# animlocs.1hourly <- movedata %>%
+#   make_and_resample_track(., sampling.interval = 1,
+#                                 tolerance = 15)
+
 animlocs.daily <- animlocs.1hourly |> 
   track_resample(rate = hours(24),
                tolerance = minutes(60)) 
@@ -61,6 +88,8 @@ animlocs.1hourly_sl <-
   mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
   filter(!is.na(d1h))
 
+animlocs.1hourly_sl <-  if(nrow(animlocs.1hourly_sl)==0) NULL else {animlocs.1hourly_sl}
+
 ## ----Maximum 24hr displacement-------------------------------------------------------------
 locs1h <- animlocs.1hourly %>% 
   mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
@@ -89,14 +118,16 @@ dmax24$ymd <- str_split(dmax24$keyName, "_", simplify = TRUE)[,2]
 dmax24$individual_id <- str_split(dmax24$keyName, "_", simplify = TRUE)[,1]
 dmax24 <- dmax24[,c("individual_id","ymd","dmax24h")]
 
-dmax24 <- dmax24 |> 
+dmax24 <- 
+  if(is.null(maxNetDisp)) NULL else {
+  dmax24 |> 
   filter(!is.na(dmax24h)) |>  
   group_by(individual_id) |>  
   filter(n() >= 7) %>%
   ungroup() |> 
   mutate(id.ymd = paste(individual_id,ymd,sep="_")) |> 
   left_join(mean.coord, by = "id.ymd") |> 
-  dplyr::select(individual_id,ymd,dmax24h, mean.x, mean.y)
+  dplyr::select(individual_id,ymd,dmax24h, mean.x, mean.y) }
 
 rm(mean.coord)
 
@@ -110,6 +141,8 @@ animlocs.daily_sl <- animlocs.daily |>
          year = lubridate::year(t_))|> 
   filter(!is.na(d24h))
 
+animlocs.daily_sl <-  if(nrow(animlocs.daily_sl)==0) NULL else {animlocs.daily_sl}
+  
 ## ----Maximum 7day displacement distance-------------------------------------------------------------
 locs24h <- flatten(data_resampled[,"animlocs.daily"]) |> bind_rows() |> tibble() |> 
   mutate(week = as.numeric(strftime(t_,format="%W")), year = as.numeric(strftime(t_,format="%Y")),
@@ -132,7 +165,9 @@ maxNetDisp <- do.call("rbind",maxNetDispL)
 
 rm(moveObjSplitTime);rm(maxNetDispL);rm(locs24h);rm(locs24h.sf)
 
-dmax7d <- data.frame(keyName=row.names(maxNetDisp), dmax7d=maxNetDisp[,1], row.names=NULL) |> 
+dmax7d <- 
+  if(is.null(maxNetDisp)) NULL else {
+  data.frame(keyName=row.names(maxNetDisp), dmax7d=maxNetDisp[,1], row.names=NULL) |> 
   mutate(week = str_split(keyName, "_", simplify = TRUE)[,3],
          year_week = paste(str_split(keyName, "_", simplify = TRUE)[,2],
                            str_split(keyName, "_", simplify = TRUE)[,3], sep ="_"),
@@ -141,7 +176,7 @@ dmax7d <- data.frame(keyName=row.names(maxNetDisp), dmax7d=maxNetDisp[,1], row.n
   group_by(individual_id) |>  filter(n() >= 10) |> ungroup() |>  
   mutate(id.year_week = paste(individual_id,year_week,sep="_")) |> 
   left_join(mean.coord, by = "id.year_week") |> 
-  dplyr::select(individual_id,week, year_week,dmax7d,mean.x, mean.y)
+  dplyr::select(individual_id,week, year_week,dmax7d,mean.x, mean.y) }
 
 rm(mean.coord)
 
@@ -169,12 +204,14 @@ maxNetDisp <- do.call("rbind",maxNetDispL)
 
 rm(moveObjSplitTime);rm(maxNetDispL);rm(locs7d);rm(locs7d.sf)
 
-dmax12m <- data.frame(keyName=row.names(maxNetDisp), dmax12m=maxNetDisp[,1], row.names=NULL) |> 
+dmax12m <- 
+  if(is.null(maxNetDisp)) NULL else {
+  data.frame(keyName=row.names(maxNetDisp), dmax12m=maxNetDisp[,1], row.names=NULL) |> 
   filter(!is.na(dmax12m)) |> 
   mutate(year = str_split(keyName, "_", simplify = TRUE)[,2],
          individual_id = str_split(keyName, "_", simplify = TRUE)[,1]) |> 
   mutate(id.year = paste(ID,year,sep="_")) |>  left_join(mean.coord, by = "id.year") |> 
-  dplyr::select(individual_id,year,dmax12m,mean.x, mean.y)
+  dplyr::select(individual_id,year,dmax12m,mean.x, mean.y) }
 
 rm(mean.coord)
 
@@ -200,12 +237,14 @@ proj4string(dat.mcp.daily) <- CRS("EPSG:4326")
 # Mollweide projection
 dat.mcp.daily <- spTransform(dat.mcp.daily,sp::CRS("+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
 
-mcp.daily <- mcp(dat.mcp.daily, percent = 95, unout = c( "m2")) %>% data.frame() %>% 
-    left_join(mean.coord, by = c("id" = "id.day")) |> 
+mcp.daily <- 
+  if(nrow(dat.mcp.daily)==0) NULL else {
+  mcp(dat.mcp.daily, percent = 95, unout = c( "m2")) %>% data.frame() %>% 
+  left_join(mean.coord, by = c("id" = "id.day")) |> 
   mutate(ymd = str_split(id, '[.]', simplify = TRUE)[,2],
          individual_id = str_split(id, '[.]', simplify = TRUE)[,1]) %>% 
   dplyr::select(individual_id,ymd,area, mean.x, mean.y)|> 
-  filter(!is.na(area)) 
+  filter(!is.na(area)) }
 
 rm(mean.coord);rm(dat.mcp.daily)
 
@@ -231,13 +270,15 @@ proj4string(dat.mcp.weekly) <- CRS("EPSG:4326")
 dat.mcp.weekly <- spTransform(dat.mcp.weekly,
                               sp::CRS("+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
 
-mcp.weekly <- mcp(dat.mcp.weekly, percent = 95, unout = c( "m2")) %>% data.frame() %>%
+mcp.weekly <- 
+  if(nrow(dat.mcp.weekly)==0) NULL else {
+  mcp(dat.mcp.weekly, percent = 95, unout = c( "m2")) %>% data.frame() %>%
   left_join(mean.coord, by = c("id" = "id.week")) |> 
   mutate(week = as.numeric(stringr::str_extract(id, "(\\d+$)")),
          year_week = stringr::str_extract(id, "[^.]*$"),
          individual_id = str_extract(id, "[^.]+")) |> 
   dplyr::select(individual_id, week, year_week, area, mean.x, mean.y)|> 
-  filter(!is.na(area)) 
+  filter(!is.na(area)) }
 
 rm(dat.mcp.weekly);rm(mean.coord)
 
@@ -259,12 +300,14 @@ proj4string(dat.mcp.monthly) <- CRS("EPSG:4326")
 # Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
 dat.mcp.monthly <- spTransform(dat.mcp.monthly,sp::CRS("+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
 
-mcp.monthly <- mcp(dat.mcp.monthly, percent = 95, unout = c("m2")) %>% data.frame() %>%   left_join(mean.coord, by = c("id" = "id.month")) |> 
+mcp.monthly <- 
+  if(nrow(dat.mcp.monthly)==0) NULL else {
+  mcp(dat.mcp.monthly, percent = 95, unout = c("m2")) %>% data.frame() %>%   left_join(mean.coord, by = c("id" = "id.month")) |> 
   mutate(month = as.numeric(stringr::str_extract(id, "(\\d+$)")),
          year_month = stringr::str_extract(id, "[^.]*$"),
          individual_id = str_extract(id, "[^.]+")) %>% 
   dplyr::select(individual_id,month,year_month,area, mean.x, mean.y)|> 
-  filter(!is.na(area)) 
+  filter(!is.na(area)) }
 
 rm(dat.mcp.monthly);rm(mean.coord)
 
@@ -285,13 +328,16 @@ proj4string(dat.mcp.annual) <- CRS("EPSG:4326")
 # Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
 dat.mcp.annual <- spTransform(dat.mcp.annual,sp::CRS("+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
 
-mcp.annual <- mcp(dat.mcp.annual, percent = 95, unout = c("m2")) %>% data.frame() %>% 
+mcp.annual <- 
+  if(nrow(dat.mcp.annual)==0) NULL else {
+  mcp(dat.mcp.annual, percent = 95, unout = c("m2")) %>% data.frame() %>% 
   left_join(mean.coord, by = c("id" = "id.year")) |> 
   mutate(id.year = id,
          year = stringr::str_extract(id, "[^.]*$"),
          individual_id = str_extract(id, "[^.]+")) %>% 
   dplyr::select(individual_id, id.year, year,area, mean.x, mean.y)|> 
   filter(!is.na(area)) 
+  }
 
 rm(dat.mcp.annual);rm(mean.coord)
 
@@ -300,7 +346,9 @@ rm(dat.mcp.annual);rm(mean.coord)
 ## ----Daily IOU-------------------------------------------------------------
 mcp.daily$id_ymd<-paste(mcp.daily$individual_id,mcp.daily$ymd,sep=".")
   
-df.IoU24h <- animlocs.1hourly_sl |>  
+df.IoU24h <- 
+  if(is.null(animlocs.1hourly_sl) | is.null(mcp.daily)) NULL else {
+  animlocs.1hourly_sl |>  
   group_by(ymd) %>% 
   mutate(cumsumD1h = sum(d1h,na.rm=T),
          mean.x = mean(x_),
@@ -309,11 +357,14 @@ df.IoU24h <- animlocs.1hourly_sl |>
   left_join(mcp.daily[,c("ymd","area")],by = "ymd") %>% 
   mutate(iou24h = cumsumD1h/sqrt(area)) %>% 
   filter(!is.na(iou24h))
+    }
 
 ## ----Monthly IOU-------------------------------------------------------------
 mcp.monthly$id_month = paste(mcp.monthly$individual_id,mcp.monthly$year_month,sep=".")
 
-df.IoU1m <- animlocs.daily_sl  %>%  
+df.IoU1m <- 
+  if(is.null(animlocs.daily_sl) | is.null(mcp.monthly)) NULL else {
+  animlocs.daily_sl  %>%  
   mutate(year_month = paste(year,month,sep="_"),
          id_month = paste(individual_id,year_month,sep="."))  |>  group_by(id_month)  |>  
   mutate(cumsum.d24h = sum(d24h,na.rm=T),
@@ -325,9 +376,12 @@ df.IoU1m <- animlocs.daily_sl  %>%
   mutate(iou1m = cumsum.d24h/sqrt(area))  |>  
   filter(!is.na(iou1m)) |> ungroup() |> 
   dplyr::select(individual_id,month,year,year_month,mean.x,mean.y,cumsum.d24h,area,iou1m)  
+    }
   
 ## ----Annual IOU-------------------------------------------------------------
-df.IoU12m <- animlocs.daily_sl  |>   
+df.IoU12m <- 
+  if(is.null(animlocs.daily_sl) | is.null(mcp.annual)) NULL else {
+  animlocs.daily_sl  |>   
   mutate(id_year = paste(individual_id,year,sep="."))  |>  group_by(id_year) |>  
   mutate(cumsum.d24h = sum(d24h,na.rm=T),
          mean.x = mean(x_),
@@ -336,6 +390,7 @@ df.IoU12m <- animlocs.daily_sl  |>
   left_join(mcp.annual[,c("id_year","area")],by = "id_year") |>  
   mutate(iou12m = cumsum.d24h/sqrt(area)) |> 
   filter(!is.na(iou12m)) 
+    }
 
 ## ----Diurnality Index-------------------------------------------------------------
 #' Estimating proportiona daily diurnality, corrected for daylight changes,
@@ -349,6 +404,15 @@ df.IoU12m <- animlocs.daily_sl  |>
 #' day and night, respectively. The diurnality index varies between -1
 #' (night active) and 1 (day active).
 
+animlocs.1hourly_sl.t <- animlocs.1hourly_sl
+animlocs.1hourly_sl.t <- NULL
+
+f.diurn <- function(a, b, c, d) {((a / b) - (c / d)) / ((a / b) + (c / d))}
+
+
+DI <- 
+  if(is.null(animlocs.1hourly_sl) ) NULL else {
+    
 diurn.ind <- animlocs.1hourly_sl |> 
   mutate(lat=y_,lon=x_,date=as.Date(t_)) |> 
   dplyr::select(lat,lon,date,individual_id,t_,ymd,d1h) 
@@ -377,11 +441,8 @@ DI <- diurn.ind %>%
                 dist.sum.night = sum(d1h[daytime=="night"]),
                 dist.length.day = sum(daytime=="day"),
                 dist.length.night = sum(daytime=="night"),
-                total.daylength = dist.length.day + dist.length.night)
-
-DI <- data.frame(DI)
-
-f.diurn <- function(a, b, c, d) {((a / b) - (c / d)) / ((a / b) + (c / d))}
+                total.daylength = dist.length.day + dist.length.night) |> 
+  data.frame()
 
 DI$diurnality <- f.diurn(DI$dist.sum.day, DI$dist.length.day, DI$dist.sum.night, DI$dist.length.night)
 
@@ -391,10 +452,20 @@ DI <- DI |>
   filter(total.daylength > 19)  |> 
   filter(!is.na(diurnality)) 
 
+DI
+}
+
 ## ----Summarize movement metrics per individual-------------------------------------------------------------
 
 # ----Function d1h-------------------------------------------------------------
-FDispl1h<-function(x){
+FDispl1h<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n1h = NA,
+                       d1h.mean = NA,d1h.median = NA,d1h.cv = NA,d1h.95 = NA,d1h.05 = NA)
+  } else {
   
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
@@ -402,25 +473,32 @@ FDispl1h<-function(x){
   n1h<-as.numeric(with(x, tapply(as.character(x$t_),individual_id, length)))
   
    # 1hr Displacement
-  D1h.mean <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, mean, na.rm=T)))
-  D1h.median <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, median, na.rm=T)))
-  D1h.cv <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  D1h.95 <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, quantile,.95, na.rm=T)))
-  D1h.05 <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, quantile,.05, na.rm=T)))
+  dh.mean <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, mean, na.rm=T)))
+  d1h.median <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, median, na.rm=T)))
+  d1h.cv <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  d1h.95 <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, quantile,.95, na.rm=T)))
+  d1h.05 <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(individual_id,
-                   n1h,
-                   D1h.mean,D1h.median,D1h.cv,D1h.95,D1h.05)
+  dats<-data.frame(individual_id,n1h,
+                   d1h.mean,d1h.median,d1h.cv,d1h.95,d1h.05)
   
   return(dats)
 }
+}
 
 Displ1h <- FDispl1h(animlocs.1hourly_sl[,c("individual_id","t_","d1h")])
-Displ1h <- Displ1h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function Max24h Displacements------
-FMaxDispl24h<-function(x){
+FMaxDispl24h<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.max24h.days = NA,
+                       dmax24h.mean = NA,dmax24h.median = NA,dmax24h.cv = NA,dmax24h.95 = NA,dmax24h.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -439,11 +517,19 @@ FMaxDispl24h<-function(x){
   
   return(dats)
 }
+}
+
 MaxDispl24h <- FMaxDispl24h(dmax24)
-MaxDispl24h <- MaxDispl24h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize 24h Displacements---------
-FDispl24h<-function(x){
+FDispl24h<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n24h.days = NA,
+                       d24h.mean = NA,d24h.median = NA,d24h.cv = NA,d24h.95 = NA,d24h.05 = NA)
+  } else {
   
   individual_id<-with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
@@ -463,11 +549,20 @@ FDispl24h<-function(x){
   
   return(dats)
 }
+}
+
 Displ24h <- FDispl24h(animlocs.daily_sl[,c("individual_id","t_","d24h")])
-Displ24h <- Displ24h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize Max7d Displacements-------
-FMaxDispl7d<-function(x){
+FMaxDispl7d<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,dmax7d.weeks = NA,
+                       dmax7d.mean = NA,dmax7d.median = NA,dmax7d.cv = NA,dmax7d.95 = NA,dmax7d.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -486,11 +581,20 @@ FMaxDispl7d<-function(x){
   
   return(dats)
 }
+}
+
 MaxDispl7d <- FMaxDispl7d(dmax7d)
-MaxDispl7d <- MaxDispl7d %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize Max12m Displacements------
-FMaxDispl12m<-function(x){
+FMaxDispl12m<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.max12m.years = NA,
+                       dmax12m.mean = NA,dmax12m.median = NA,dmax12m.cv = NA,dmax12m.95 = NA,dmax12m.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -509,11 +613,20 @@ FMaxDispl12m<-function(x){
   
   return(dats)
 }
+}
+
 MaxDispl12m <- FMaxDispl12m(dmax12m)
-MaxDispl12m <- MaxDispl12m %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize 1d MCP--------------------
-FSumMCP1d<-function(x){
+FSumMCP1d<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.mcp24h.days = NA,
+                       mcp24h.mean = NA,mcp24h.median = NA,mcp24h.cv = NA,mcp24h.95 = NA,mcp24h.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -532,11 +645,19 @@ FSumMCP1d<-function(x){
   
   return(dats)
 }
+}
 MCP24h <- FSumMCP1d(mcp.daily)
-MCP24h <- MCP24h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize 7d MCP--------------------
-FSumMCP7d<-function(x){
+FSumMCP7d<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.mcp7d.weeks = NA,
+                       mcp7d.mean = NA,mcp7d.median = NA,mcp7d.cv = NA,mcp7d.95 = NA,mcp7d.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -555,11 +676,20 @@ FSumMCP7d<-function(x){
   
   return(dats)
 }
+}
+
 MCP7d <- FSumMCP7d(mcp.weekly)
-MCP7d <- MCP7d %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize 1m MCP--------------------
-FSumMCP1m<-function(x){
+FSumMCP1m<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.mcp1m.months = NA,
+                       mcp1m.mean = NA,mcp1m.median = NA,mcp1m.cv = NA,mcp1m.95 = NA,mcp1m.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
 
   n.mcp1m.months<-as.numeric(with(x, tapply(x$year_month,individual_id, length)))
@@ -575,31 +705,48 @@ FSumMCP1m<-function(x){
   
   return(dats)
 }
+}
+
 MCP1m <- FSumMCP1m(mcp.monthly)
-MCP1m <- MCP1m %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize 12m MCP--------------------
-FSumMCP12m<-function(x){
+FSumMCP12m<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.mcp12m.years = NA,
+                       mcp12m.mean = NA,mcp12m.median = NA,mcp12m.cv = NA,mcp12m.95 = NA,mcp12m.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
 
-  n.MCP12m.years<-as.numeric(with(x, tapply(x$year,individual_id, length)))
+  n.mcp12m.years<-as.numeric(with(x, tapply(x$year,individual_id, length)))
   
-  MCP12m.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
-  MCP12m.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
-  MCP12m.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  MCP12m.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
-  MCP12m.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
+  mcp12m.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
+  mcp12m.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
+  mcp12m.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  mcp12m.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
+  mcp12m.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
   
-  dats<-data.frame(individual_id,n.MCP12m.years,
-                   MCP12m.mean,MCP12m.median,MCP12m.cv,MCP12m.95,MCP12m.05)
+  dats<-data.frame(individual_id,n.mcp12m.years,
+                   mcp12m.mean,mcp12m.median,mcp12m.cv,mcp12m.95,mcp12m.05)
   
   return(dats)
-}
+  }}
+
 MCP12m <- FSumMCP12m(mcp.annual)
-MCP12m <- MCP12m %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize IoU24h--------------------
-FSumIOU24h<-function(x){
+FSumIOU24h<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.iou24h.days = NA,
+                       iou24h.mean = NA,iou24h.median = NA,iou24h.cv = NA,iou24h.95 = NA,iou24h.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -617,13 +764,20 @@ FSumIOU24h<-function(x){
                    iou24h.mean,iou24h.median,iou24h.cv,iou24h.95,iou24h.05)
   
   return(dats)
-}
+  }}
 
 IOU24h <- FSumIOU24h(df.IoU24h)
-IOU24h <- IOU24h %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize IoU1m--------------------
-FSumIOU1m<-function(x){
+FSumIOU1m<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.iou1m.month = NA,
+                       iou1m.mean = NA,iou1m.median = NA,iou1m.cv = NA,iou1m.95 = NA,iou1m.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -641,14 +795,21 @@ FSumIOU1m<-function(x){
                    iou1m.mean,iou1m.median,iou1m.cv,iou1m.95,iou1m.05)
   
   return(dats)
-}
+}}
 
 IOU1m <- FSumIOU1m(df.IoU1m)
-IOU1m <- IOU1m %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize IoU12m--------------------
 
-FSumIOU12m<-function(x){
+FSumIOU12m<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.iou12m.year = NA,
+                       iou12m.mean = NA,iou12m.median = NA,iou12m.cv = NA,iou12m.95 = NA,iou12m.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per indivindividual_idual
@@ -666,12 +827,20 @@ FSumIOU12m<-function(x){
                    iou12m.mean,iou12m.median,iou12m.cv,iou12m.95,iou12m.05)
   
   return(dats)
-}
+  }}
+
 IOU12m <- FSumIOU12m(data.frame(df.IoU12m))
-IOU12m <- IOU12m %>% mutate(individual_id = as.character(individual_id))
 
 ## ----function to summarize Diurnality Index--------------------
-FSumDI<-function(x){
+FSumDI<-function(x)
+  {
+  # Check if the input is NULL
+  if (is.null(x)) {
+    # Create a placeholder dataframe with NA values
+    dats <- data.frame(individual_id = NA,n.di.days = NA,
+                       di.mean = NA,di.median = NA,di.cv = NA,di.95 = NA,di.05 = NA)
+  } else {
+    
   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # How many days per indivindividual_idual
@@ -689,30 +858,41 @@ FSumDI<-function(x){
                    di.mean,di.median,di.cv,di.95,di.05)
   
   return(dats)
-}
+  }
+  }
 
 DI.12 <- FSumDI(DI)
 DI.12 <- DI.12 %>% mutate(individual_id = as.character(individual_id))
 
 ## ----Build database with summary values--------------------
 #' ## PROBLEM - this does not work when some metrics could not be computed
-MoveTrait.v0 <- full_join(Displ1h, full_join(Displ24h, full_join(MaxDispl24h, 
-             full_join(MaxDispl7d, full_join(MaxDispl12m, full_join(MCP24h, 
-             full_join(MCP7d, full_join(MCP1m, full_join(MCP12m, full_join(IOU24h, 
-             full_join(IOU1m, full_join(IOU12m, DI.12))))))))))))
+MoveTrait.v0 <- full_join(Displ1h, 
+                          full_join(Displ24h, 
+                          full_join(MaxDispl24h, 
+                          full_join(MaxDispl7d, 
+                          full_join(MaxDispl12m, 
+                          full_join(MCP24h, 
+                          full_join(MCP7d, 
+                          full_join(MCP1m, 
+                          full_join(MCP12m, 
+                          full_join(IOU24h, 
+                          full_join(IOU1m, 
+                          full_join(IOU12m, DI.12)))))))))))) %>% 
+  filter(if_any(everything(), ~ !is.na(.)))
+
 
 library(bit64)
 movedata2 <- movedata %>% 
   mutate(study_individual_id = as.integer64(study_individual_id),
          individual_id = individual_id,
-         Species = taxon_canonical_name,
-         BodyMass_g = animal_mass,
-         Sex = sex,
-         Lifestage = animal_life_stage) |> 
+         species = taxon_canonical_name,
+         bodymass_g = animal_mass,
+         sex = sex,
+         lifestage = animal_life_stage) |> 
   group_by(individual_id) %>% 
   mutate(mean.longitude = mean(coords_x,na.rm=T),
          mean.latitude = mean(coords_y,na.rm=T)) %>% 
-  dplyr::select(study_individual_id,individual_id,Species,BodyMass_g,Sex,Lifestage,mean.longitude,mean.latitude) %>% 
+  dplyr::select(study_individual_id,individual_id,species,bodymass_g,sex,lifestage,mean.longitude,mean.latitude) %>% 
   mutate(individual_id = as.character(individual_id)) %>% 
   distinct()
 
@@ -724,15 +904,14 @@ movedata2 %>%
 #' There are still list elements in the metadata - only keep first element!
 DBMoveTrait.v02 <-
 DBMoveTrait.v02 %>%
-    mutate(Lifestage = map_chr(Lifestage, first),
-           BodyMass_g = map_chr(BodyMass_g, first))
+    mutate(lifestage = map_chr(lifestage, first),
+           bodymass_g = map_chr(bodyMass_g, first))
 
-DBMoveTrait.v02$BodyMass_g <- as.numeric(DBMoveTrait.v02$BodyMass_g)
+DBMoveTrait.v02$bodymass_g <- as.numeric(DBMoveTrait.v02$bodymass_g)
 
 ## ----Save database with summaries--------------------
-pathfolder_summary <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/output_movebank/trait_summaries/"
-saveRDS(DBMoveTrait.v02,
-        paste0(pathfolder_summary,DBMoveTrait.v02$individual_id,".rds"))  
+#pathfolder_summary <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/output_movebank/trait_summaries/"
+#saveRDS(DBMoveTrait.v02,paste0(pathfolder_summary,DBMoveTrait.v02$individual_id,".rds"))  
 
 
 ## ----Build full database including raw metrics data--------------------
@@ -745,101 +924,91 @@ MoveTrait.v0_spatial <-
             by = c("individual_id" = "individual_id")) %>% 
   
   # 1 hourly
-  left_join(.,  animlocs.1hourly_sl %>%
+  {if (!is.null(dmax12m)) left_join(.,  animlocs.1hourly_sl %>%
               data.frame %>% 
               dplyr::select("individual_id","t_","d1h","x","y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(Displ.1h = data) %>% 
+              tindividual_idyr::nest(Displ.1h = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} |> 
   
   # 24 hourly
-  left_join(.,  animlocs.daily_sl %>%
+  {if (!is.null(dmax12m)) left_join(.,  animlocs.daily_sl %>%
               dplyr::select("individual_id","t_","d24h","x","y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(Displ.24h = data) %>% 
+              tindividual_idyr::nest(Displ.24h = -individual_id), 
+            by = c("individual_id" = "individual_id")) else .}  %>% 
   
   # Dmax24
-  left_join(.,  dmax24 %>%
+  {if (!is.null(dmax12m)) left_join(.,  dmax24 %>%
               dplyr::select("individual_id","ymd","dmax24","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(MaxDispl.24h = data) %>% 
+              tindividual_idyr::nest(MaxDispl.24h = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
   
   # Dmax7d
-  left_join(.,  dmax7d %>%
+  {if (!is.null(dmax12m)) left_join(.,  dmax7d %>%
               dplyr::select("individual_id","week","year_week","dmax7d","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(MaxDispl.7d = data) %>% 
+              tindividual_idyr::nest(MaxDispl.7d = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # Dmax12m
-  left_join(.,  dmax12m %>%
+  {if (!is.null(dmax12m)) left_join(.,  dmax12m %>%
               dplyr::select("individual_id","year","dmax12m","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(MaxDispl.12m = data) %>% 
+              tindividual_idyr::nest(MaxDispl.12m = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
   
   # mcp.daily
-  left_join(.,  mcp.daily %>%
+  {if (!is.null(dmax12m)) left_join(.,  mcp.daily %>%
               dplyr::select("individual_id","ymd","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(Mcp.24h = data) %>% 
+              tindividual_idyr::nest(Mcp.24h = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
   
   # mcp.weekly
-  left_join(.,  mcp.weekly %>%
+  {if (!is.null(dmax12m)) left_join(.,  mcp.weekly %>%
               dplyr::select("individual_id","week","year_week","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(Mcp.7d = data) %>% 
+              tindividual_idyr::nest(Mcp.7d = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>%
   
   # mcp.monthly
-  left_join(.,  mcp.monthly %>%
+  {if (!is.null(dmax12m)) left_join(.,  mcp.monthly %>%
               dplyr::select("individual_id","month","year_month","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(Mcp.1m = data) %>% 
+              tindividual_idyr::nest(Mcp.1m = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # mcp.annual
-  left_join(.,  mcp.annual %>%
+  {if (!is.null(dmax12m)) left_join(.,  mcp.annual %>%
               dplyr::select("individual_id","year","area","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(Mcp.12m = data) %>% 
-  
+              tindividual_idyr::nest(Mcp.12m = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
+
   # Intensity of Use 24h
-  left_join(.,  df.IoU24h %>%
+  {if (!is.null(dmax12m)) left_join(.,  df.IoU24h %>%
               ungroup() |>
               dplyr::select("individual_id","ymd","iou24h","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(IoU.24h = data) %>% 
-  
+              tindividual_idyr::nest(IoU.24h = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
+
   # Intensity of Use 1m
-  left_join(.,  df.IoU1m %>%
+  {if (!is.null(dmax12m)) left_join(.,  df.IoU1m %>%
               ungroup() |> 
               dplyr::select("individual_id","month","year","iou1m","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(IoU.1m = data) %>% 
+              tindividual_idyr::nest(IoU.1m = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
 
   # Intensity of Use 12m
-  left_join(.,  df.IoU12m %>%
+  {if (!is.null(dmax12m)) left_join(.,  df.IoU12m %>%
               ungroup() |>
               dplyr::select("individual_id","year","iou12m","mean.x", "mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(IoU.12m = data) %>% 
-  
+              tindividual_idyr::nest(IoU.12m = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} %>% 
+
   # Diurnality Index
-  left_join(.,  DI %>%
+  {if (!is.null(dmax12m)) left_join(.,  DI %>%
               dplyr::select("individual_id","ymd","diurnality","mean.x","mean.y") %>% 
-              tindividual_idyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(Diurnality = data) 
+              tindividual_idyr::nest(Diurnality = -individual_id), 
+            by = c("individual_id" = "individual_id"))  else .} 
 
 ## ----Save full database including raw metrics data--------------------
-pathfolder_spatial <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/movebank/trait_summaries_spatial/"
-saveRDS(MoveTrait.v0_spatial,paste0(pathfolder_spatial,MoveTrait.v0_spatial$individual_id,".rds"))  
+#pathfolder_spatial <- "/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/movebank/trait_summaries_spatial/"
+#saveRDS(MoveTrait.v0_spatial,paste0(pathfolder_spatial,MoveTrait.v0_spatial$individual_id,".rds"))  
 
+
+DBMoveTrait.v02
+MoveTrait.v0_spatial
