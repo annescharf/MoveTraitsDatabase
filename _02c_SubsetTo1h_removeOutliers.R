@@ -4,6 +4,7 @@
 ## outliers according to distance are removed
 
 ### ToDo: clean up script, adjust folder names, think about how best do it...
+## make amt object at this point
 #### IDEA:
 ## subset to 30mins? how important is the hour?
 ## 1st round, calculate speed and distance per species and make table with percentilX values as cutoff
@@ -15,6 +16,7 @@
 ## - how to deal with dead animals
 ## - how to deal with undefined deployments: tag in car, house, plane before or after on animal -> vehicles will get removed with speed, but sitting in a house will be tricky
 ## - difference between sitting in a house, dead, nesting/dening...
+
 
 
 

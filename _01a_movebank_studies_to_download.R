@@ -5,6 +5,10 @@
 ### and those that are publicly available
 ### metadata table is created and saved including study name, owner, license terms, download date, etc
 
+## ToDo: 
+#### when removing duplicated studies, retain those of all_shared because of the limesurvey, or! join the limesurvey table to the metadata table
+#### merge limesurvey table with "all_shared" table to assign optout/optin of resolution to publish
+
 library(move2)
 library(units)
 library(dplyr)
@@ -54,6 +58,7 @@ metadata_studies <- allstudies[,c(
   "citation",
   "license_terms",
   "license_type",
+  # "xxxxx", ## attribute of resolution choice from limesurvey
   "download_date"
   )]
 

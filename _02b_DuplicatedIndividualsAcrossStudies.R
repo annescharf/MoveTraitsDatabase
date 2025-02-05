@@ -6,6 +6,8 @@
 # OPTION: keep the one with longest duration or with most gps points ~L115
 
 ## ToDo: adjust folder names & check that sanitiy check plots are saved correctly. "species", "speciesName" or "taxon"?? for column name
+## filter by manipulation type "manipulation-type" (deployment attribute)
+## future: merge metadata table with reference table to know opt in opt out of finde scaled traits
 
 
 ############# function ####################################
