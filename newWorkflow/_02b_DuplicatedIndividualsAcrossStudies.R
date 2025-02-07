@@ -1,29 +1,41 @@
 ### in this script:
-### duplicated data is identified. As the same data can be present partially or entirely in multiple studies in MB, these need to be identified when downloading all data of one or multiple species. Given that often the individual_local_identifier is different for exactly the same data, we rely heavily on tag id, as this is more likely to not change. Here we find duplicated individuals/tags within/across studies:
+### duplicated data is identified. As the same data can be present partially 
+## or entirely in multiple studies in MB, these need to be identified when 
+## downloading all data of one or multiple species. Given that often the 
+## individual_local_identifier is different for exactly the same data, we 
+## rely heavily on tag id, as this is more likely to not change. Here we find 
+## duplicated individuals/tags within/across studies:
 # - check duplicated by tag-sps
 # - check individuals with multiple tags simultaneously
-# code checks if possible duplicated indivs overlap in tracking time, only if they are overlaping in time they are marked as duplicated
+# code checks if possible duplicated indivs overlap in tracking time, only if 
+## they are overlaping in time they are marked as duplicated
 # OPTION: keep the one with longest duration or with most gps points ~L115
 
-## ToDo: adjust folder names & check that sanitiy check plots are saved correctly. "species", "speciesName" or "taxon"?? for column name
-## filter by manipulation type "manipulation-type" (deployment attribute)
+#######################################
+## ToDo: 
 ## future: merge metadata table with reference table to know opt in opt out of finde scaled traits
+#######################################
 
+##############################################################################
+### SETTINGS ####
+## choose which duplicate to keep, with longest duration ("duration") or with largest number of gps points ("locations")
+keepCriterion <- "duration" # "duration", "locations"
+##############################################################################
 
-############# function ####################################
+#######---------------------------------------------------------------------#########
+## function: create reference table with 1 line per individualID-tagID combination ##
+#######---------------------------------------------------------------------#########
 library('move2')
 library('lubridate')
 library("data.table")
 
 ## get a reference table with 1 line per individualID-tagID combination
-# So individuals which have multiple tags/deployments will have one line per tagID, associated to the start and end of the tracking time for that specific tag.
+## So individuals which have multiple tags/deployments will have one line per tagID, 
+## associated to the start and end of the tracking time for that specific tag.
 # This is important for finding duplicated tagIDs within or across studies.
 
-# path_to_indv_move2 <- "/home/ascharf/Documents/Projects/Drylands/UDsizeChange/2.vultureIndv_mv2_clean_empty_duply//2034212088_G32753 - turquoise black 25 - 3633 - rehab.rds"
-
-path_to_indv_move2 <- "/home/ascharf/Documents/Projects/Drylands/UDsizeChange/2.vultureIndv_mv2_clean_empty_duply//2770553714_ID1.rds"
-
-referenceTableStudies <-  function(path_to_indv_move2){ 
+# path_to_indv_move2 <- "./MoveTraitsData/2.MB_indv_mv2_clean//404939825_426527460.rds"
+referenceTableStudies <-  function(path_to_indv_move2){
   print(path_to_indv_move2) # this makes it easy to find which one gave an error
   indiv_mv2 <- readRDS(path_to_indv_move2)
   indiv_mv2_td <- mt_track_data(indiv_mv2)
@@ -55,7 +67,10 @@ referenceTableStudies <-  function(path_to_indv_move2){
       deployment_id = as.character(tag_td$deployment_id),
       # species = if(!is.null(tag_td$taxon_canonical_name)){tag_td$taxon_canonical_name}else{NA},
       species = if(!is.null(tag_td$taxon_canonical_name)){tag_td$taxon_canonical_name}else{tag_td$taxon_ids}, ## this leads to species having multiple species names in a string
+      sex = if(!is.null(tag_td$sex)){tag_td$sex}else{NA}, 
+      animal_mass = if(!is.null(tag_td$animal_mass)){tag_td$animal_mass}else{NA}, 
       animal_life_stage = if(is.null(tag_td$animal_life_stage)){NA}else if(is.na(unique(tag_td$animal_life_stage))){NA}else{unique(as.character(tag_td$animal_life_stage))}, ## included not for filtering here, but including it as needed afterwards
+      manipulation_type = if(!is.null(tag_td$manipulation_type)){tag_td$manipulation_type}else{NA}, # 'none' or NA are not manipulated
       tracking_duration_days = round(as.numeric(difftime(range(mt_time(tag))[2],range(mt_time(tag))[1],units="days")),2),
       tracking_start_date = range(mt_time(tag))[1],  # Important to keep the full timestamp, as in the same day a tag can be removed from one individual and put on another one.
       tracking_end_date = range(mt_time(tag))[2],
@@ -66,57 +81,62 @@ referenceTableStudies <-  function(path_to_indv_move2){
     units(rdf$median_timelag_mins) <- units::make_units(minute)
     units(rdf$min_timelag_mins) <- units::make_units(minute)
     units(rdf$tracking_duration_days) <- units::make_units(day)
+    units(rdf$animal_mass) <- units::make_units(g)
     rdf$median_timelag_mins <- round(rdf$median_timelag_mins)
     rdf$min_timelag_mins <- round(rdf$min_timelag_mins)
     return(rdf)
   })))
   return(indTable)
 }
-
-
-
 ########### end function #################################
 
-#____________________________________
-## Individuals reference table: ####
-# Create a reference table, one entry per individual: #####
-
-genPath <- "/home/ascharf/Documents/Projects/Drylands/UDsizeChange/"
-pthClean <- "2.vultureIndv_mv2_clean_empty_duply/"
-dataPath <- paste0(genPath,pthClean)
-
-fls <- list.files(dataPath, pattern="rds", full.names = T)
+#######--------------------------#######
+## create Individuals reference table ##
+#######--------------------------#######
+# Create a reference table, one entry per individual-tag combination: #####
+pathTOfolder <- "./MoveTraitsData/"
+pthClean <- paste0(pathTOfolder,"2.MB_indv_mv2_clean/")
+flsMV <- list.files(pthClean, full.names = T)
 
 start_time<- Sys.time()
-referenceTableStudies_ALL <- as.data.frame(rbindlist(lapply(fls, referenceTableStudies)))
+referenceTableStudies_ALL <- as.data.frame(rbindlist(lapply(flsMV, referenceTableStudies)))
 end_time <- Sys.time() 
-end_time-start_time # ~45mins
+end_time-start_time # 
 
-saveRDS(referenceTableStudies_ALL, file=paste0(genPath,"/referenceTableStudies_ALL_original.rds")) ## just to making sure to have a copy that is untouched, as after this it will be modified and overwritten....  
+saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_original.rds")) ## just to making sure to have a copy that is untouched, as after this it will be modified and overwritten....  
 
-## ensure only keeping individuals with species name:
+#######--------------------------------#########
+## filter reference table by certain criteria ##
+#######--------------------------------#########
 
-referenceTableStudies_ALL <- referenceTableStudies_ALL[-grep(",", referenceTableStudies_ALL$species),] ## removing those with multiple species names
+## ensure only keeping individuals with species name: ###
+referenceTableStudies_ALL_nospsName <- referenceTableStudies_ALL[grep(",", referenceTableStudies_ALL$species),]
+if(nrow(referenceTableStudies_ALL_nospsName)>0){saveRDS(referenceTableStudies_ALL_nospsName, file=paste0(pathTOfolder,"/individulas_no_taxon_name.rds"))} ## saving table incase feedback wants to be given
+if(nrow(referenceTableStudies_ALL_nospsName)>0){
+referenceTableStudies_ALL <- referenceTableStudies_ALL[!referenceTableStudies_ALL$fileName%in%referenceTableStudies_ALL_nospsName$fileName,]} ## removing those with multiple species names
 referenceTableStudies_ALL <- referenceTableStudies_ALL[!is.na(referenceTableStudies_ALL$species),]
 
-saveRDS(referenceTableStudies_ALL, file=paste0(genPath,"/referenceTableStudies_ALL_original_w_sps.rds")) ## just to making sure to have a copy that is untouched, as after this it will be modified and overwritten....  
+saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_original_w_sps.rds")) ## just to making sure to have a copy that is untouched, as after this it will be modified and overwritten....  
 
+## remove individuals according to their manipulation type
+table(referenceTableStudies_ALL$manipulation_type)
+referenceTableStudies_ALL <- referenceTableStudies_ALL[is.na(referenceTableStudies_ALL$manipulation_type) | referenceTableStudies_ALL$manipulation_type%in%"none",]
+saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_original_w_sps.rds"))
 
-#_______________________________________________________________
-## Find duplicated individuals/tags within/across studies: ####
-# this script might have to be adjusted depending on the particular issues that come up when all studies are gathered
+#######---------------------------------#########
+## Find duplicated tags within/across studies: ##
+#######---------------------------------#########
+## tag names seem to be very consistent. Individual names change for the 
+## same indiv that appear in several studies
 
 library(DescTools) # for function %overlaps%
 library(dplyr)
 library(bit64)
-referenceTableStudies_ALL <-  readRDS(paste0(genPath,"/referenceTableStudies_ALL_original_w_sps.rds"))
+referenceTableStudies_ALL <-  readRDS(paste0(pathTOfolder,"/referenceTableStudies_ALL_original_w_sps.rds"))
 referenceTableStudies_ALL$MBid <- as.character(referenceTableStudies_ALL$MBid) ## class integer64 sometimes gets in loops, and converts to something else (very long number)
 
 ## ensure that max tracking end date corresponds to download date.
 max(referenceTableStudies_ALL$tracking_end_date) 
-
-## choose which duplicate to keep, with longest duration ("duration") or with largest number of gps points ("locations")
-keepCriterion <- "duration" # "duration", "locations"
 
 ## adding some columns for managing the table
 referenceTableStudies_ALL$rowID <- paste0("rID_",1:nrow(referenceTableStudies_ALL))
@@ -124,12 +144,10 @@ referenceTableStudies_ALL$excluded <- "no"
 referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps <- NA
 referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps2 <- NA
 
-
 ## adding columns by which to filter
 referenceTableStudies_ALL$Ind_Tag_Sps <- paste0(referenceTableStudies_ALL$individual_local_identifier,"_",referenceTableStudies_ALL$tag_local_identifier,"_",referenceTableStudies_ALL$species)
 referenceTableStudies_ALL$Tag_Sps <- paste0(referenceTableStudies_ALL$tag_local_identifier,"_",referenceTableStudies_ALL$species)
 referenceTableStudies_ALL$Stu_Ind_Sps <- paste0(referenceTableStudies_ALL$MBid,"_",referenceTableStudies_ALL$individual_local_identifier,"_",referenceTableStudies_ALL$species)
-
 
 ## check duplicated by tag-sps ----
 # get table containing all rows of duplication
@@ -180,7 +198,7 @@ if(nrow(dupliTab_TS)>1){
           }
         })
       }
-      ## PROBLEM, getting all duplicates together, sometimes its 2 and 2...
+      ## getting all duplicates together, sometimes its 2 and 2...
       exclude <- unique(unlist(exclude_l))
       # return(exclude)
       referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID %in% exclude] <- "yes_duplicated_Tag_Sps"
@@ -211,10 +229,11 @@ identical(hck$kept_MB_Ind_Tag_Sps,hck$kept_MB_Ind_Tag_Sps2)
 referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps[is.na(referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps)] <- referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps2[is.na(referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps)]
 referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps2 <- NULL
 
-saveRDS(referenceTableStudies_ALL, file=paste0(genPath,"/referenceTableStudies_ALL_excludedColumn.rds"))
+saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 
-
-## check individuals with multiple tags simultaneously ----
+#######-----------------------------------------#########
+## check individuals with multiple tags simultaneously ##
+#######-----------------------------------------#########
 # get table containing all rows of duplication
 dupliTab_I <- referenceTableStudies_ALL[referenceTableStudies_ALL$excluded=="no",] ## removing those that have been already identified by duplicated Tag_Sps
 dupliTab_I <- dupliTab_I[dupliTab_I$Stu_Ind_Sps %in% dupliTab_I$Stu_Ind_Sps[duplicated(dupliTab_I$Stu_Ind_Sps)],] 
@@ -265,12 +284,14 @@ if(nrow(dupliTab_I)>1){
   referenceTableStudies_ALL$excluded[referenceTableStudies_ALL$rowID %in% toExclude] <- "yes_duplicated_Study-Individual-Species"
 }
 
-saveRDS(referenceTableStudies_ALL, file=paste0(genPath,"/referenceTableStudies_ALL_excludedColumn.rds"))
+saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 
 table(referenceTableStudies_ALL$excluded)
 
-### ensuring all duplicates have been actually removed, and the correct one has been selected
-referenceTableStudies_ALL <- readRDS(file=paste0(genPath,"/referenceTableStudies_ALL_excludedColumn.rds"))
+#######-------------------------------------------------------------------------------#########
+## ensuring all duplicates have been actually removed, and the correct one has been selected ##
+#######-------------------------------------------------------------------------------#########
+referenceTableStudies_ALL <- readRDS(file=paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 
 checkDF <- referenceTableStudies_ALL[complete.cases(referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps),]
 
@@ -312,27 +333,28 @@ table(unlist(lapply(checkL,function(x){
   nrow(x[x$excluded=="no",])
 })))
 
-saveRDS(referenceTableStudies_ALL, file=paste0(genPath,"/referenceTableStudies_ALL_excludedColumn.rds"))
+saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 
-#_____________________
-## Sanity checks ####
-# Plot the duplicated tags to make sure it's the same individual
+#######-------------------------------------------------#########
+## Sanity checks: plots of duplicated individuals side by side ##
+#######-------------------------------------------------#########
+## Plot the duplicated tags to make sure it's the same individual. Tracks are 
+## sampled to 1 position a day to make them lighter. Some plots may be empty 
+## if tracks are shorter than one day
+
 library(move2)
 library(ggplot2)
 
-genPath <- "/home/ascharf/Documents/Projects/Drylands/UDsizeChange/"
-pthClean <- "2.vultureIndv_mv2_clean_empty_duply/"
-dataPath <- paste0(genPath,pthClean)
-dir.create(paste0(genPath,"3.duplicated_plots"))
-plotPth <- paste0(genPath,"3.duplicated_plots/")
+pathTOfolder <- "./MoveTraitsData/"
+pthClean <- paste0(pathTOfolder,"2.MB_indv_mv2_clean/")
+dir.create(paste0(pathTOfolder,"3.duplicated_plots"))
+plotPth <- paste0(pathTOfolder,"3.duplicated_plots/")
 
-referenceTableStudies_ALL <- readRDS(file=paste0(genPath,"/referenceTableStudies_ALL_excludedColumn.rds"))
-
+referenceTableStudies_ALL <- readRDS(file=paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 checkDF <- referenceTableStudies_ALL[complete.cases(referenceTableStudies_ALL$kept_MB_Ind_Tag_Sps),]
-
 checkL <- split(checkDF,checkDF$kept_MB_Ind_Tag_Sps)
 
-
+# y <- checkL[[2]]
 lapply(checkL, function(y)try({
   print(y)
   df <- data.frame(fileName=y$fileName, keep=y$excluded)
@@ -341,19 +363,20 @@ lapply(checkL, function(y)try({
   
   dupL <- lapply(y$fileName, function(x){
     print(x)
-    m <- readRDS(paste0(dataPath,x))
+    m <- readRDS(paste0(pthClean,x))
     m$fileName <- x
     m$fileName <- as.factor(m$fileName)
     m$keep <- df$keep[df$fileName==x]
     mt_track_id(m) <- "fileName"
+    m <- mt_as_track_attribute(m,"individual_local_identifier")
     return(m)
   })
   mv2 <- mt_stack(dupL)
   mv2 <- mt_as_track_attribute(mv2,"keep",.keep=T)
   mv2 <- mt_filter_per_interval(mv2,criterion="first",unit="day") # making plots lighter
-  jpg(file=paste0(plotPth,mt_track_id(mv2)[1],".jpg"), width=20, height=12)
-  ggplot()+geom_sf(data=mt_track_lines(mv2), aes(color=keep))+facet_wrap(~fileName,nrow=1)
-  # print(pl)
+  jpeg(file=paste0(plotPth,mt_track_id(mv2)[1],".jpg"), width=20, height=12, units="cm", res=150)
+  pl <- ggplot(data=mt_track_lines(mv2))+geom_sf(aes(color=keep))+facet_wrap(~fileName+individual_local_identifier,nrow=1)
+  print(pl)
   dev.off()
 }))
 

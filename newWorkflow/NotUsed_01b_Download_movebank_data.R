@@ -3,12 +3,24 @@
 ## data is downloaded from movebank, each individual is downloaded separately. license agreements are accepted.
 ## studies and individuals are checked if they have changed since last download, only individuals that have more data get downloaded again
 
+#######################################
 ## ToDo: make while loop to download all data when connection fails. See if it is possible to add a if file has not been saved for e.g. 1h, stop and start again. Sometimes code gets stuck.
+#######################################
 
+####################################################################
+## SETTINGS: 
+firstRound <- T # or F if data already have been downloaded
+check4newData <- F # or T - next time download, only download indiv with new data
+excludeDownlToday <- F # or T - if script broke while downloading, to not download all data that has been downloaded today already
+## dates below not relevant for very first round
+lastDwld <- "2025-02-06"
+thisDwnl <- "2025-02-06" ## if interrupted
+####################################################################
 
 library(move2)
 library(bit64)
 library(units)
+library(R.utils)
 
 # specify account to use in the R session
 # keyring::key_list()
@@ -21,47 +33,41 @@ pthDownld <- paste0(pathTOfolder,"1.MB_indv_mv2/")
 ### studies to download
 allstudies <- readRDS(paste0(pathTOfolder,"full_table_all_studies.rds"))
 
-## check which studies are already downloaded. If last timestamp after last download date, download again, if not, jump. For 1st round directly run ~L28
-
-lastDwld <- "2024-11-25"
-thisDwnl <- "2024-12-13" ## if interrupted
-
-##################
+#####
+if(!firstRound){
 ## when download is interrupted in the middle (internet connection in Bückle). Checking when files were last saved
-library(R.utils)
-
 tb_pth <- data.frame(pth=list.files(pthDownld, full.names=T),filenm=list.files(pthDownld, full.names=F), mbid=sub("_.*", "", list.files(pthDownld)))
 tb_pth$lastSaved <- do.call(c,(lapply(tb_pth$pth, lastModified)))
 IDs_doneMdl <- unique(tb_pth$mbid[tb_pth$lastSaved >= as.POSIXct(thisDwnl)])
-###################
 
 ### here studies are assigend the status "done" if there is no change in data since last download, and "live" if more data has been added since. "done" are ignored in the download
 IDs_done <- unique(sub("_.*", "", list.files(pthDownld)))
-compareDF <- all
+compareDF <- allstudies
 compareDF$status <- NA
 compareDF$status[compareDF$id%in%IDs_done] <- "done"
 compareDF$status[compareDF$status=="done" & compareDF$timestamp_last_deployed_location>as.POSIXct(lastDwld, tz="UTC")] <- "live"
 table(compareDF$status)
 table(is.na(compareDF$status))
+}
 
-Ids_toDo <- all$id ## first round
+Ids_toDo <- allstudies$id ## first round
+
+if(!firstRound){
 # and # subsequent rounds
 Ids_toDo <- compareDF$id[!compareDF$status%in%c("done")]
 # and ## interrupted in the middle
 Ids_toDo <- Ids_toDo[!Ids_toDo%in%IDs_doneMdl]
-
-start_time <- Sys.time()
-
+}
 # studyId <- Ids_toDo[1]
-# studyId <-560810760
+# studyId <-1764627
 
-
-# newerToday <- tb_pth$filenm[tb_pth$lastSaved >= as.POSIXct(thisDwnl)] ## to exclude those downloaded today already
-lastDownload <- tb_pth$filenm[tb_pth$lastSaved >= as.POSIXct(lastDwld)] ## to download missed last time
+if(check4newData & excludeDownlToday){stop("Both 'check4newData' & 'excludeDownlToday' are set to TRUE, only one at a time can be set to TRUE, please choose one.")}
+if(excludeDownlToday){newerToday <- tb_pth$filenm[tb_pth$lastSaved >= as.POSIXct(thisDwnl)]} ## to exclude those downloaded today already
+if(check4newData){lastDownload <- tb_pth$filenm[tb_pth$lastSaved >= as.POSIXct(lastDwld)]} ## to download missed last time
 
 ########################
 #### download by individual. object "result" only contains the error messages ######
-
+start_time <- Sys.time()
 results <- lapply(Ids_toDo, function(studyId)try({
   ## create table with individuals per study, to be able to download per individual
   class(studyId) <- "integer64" ## lapply changes the class when looping though it
@@ -93,8 +99,8 @@ results <- lapply(Ids_toDo, function(studyId)try({
   reftb$status[reftb$pthName%in%doneIndv] <- "done"
   reftb$status[reftb$status=="done" & reftb$timestamp_end_individual>as.POSIXct(lastDwld, tz="UTC")] <- "live"
   liveAndmissingIndv <- reftb$pthName[!reftb$status%in%c("done")]
-  # liveAndmissingIndv <- liveAndmissingIndv[!liveAndmissingIndv%in%newerToday] # to exclude those downloaded today already
-  liveAndmissingIndv <- liveAndmissingIndv[!liveAndmissingIndv%in%lastDownload] # to download missed last download
+  if(excludeDownlToday){liveAndmissingIndv <- liveAndmissingIndv[!liveAndmissingIndv%in%newerToday]} # to exclude those downloaded today already
+  if(check4newData){liveAndmissingIndv <- liveAndmissingIndv[!liveAndmissingIndv%in%lastDownload]} # to download missed last download
   
   print(paste0("done:",length(doneIndv),"-todo:",length(liveAndmissingIndv)))
   
@@ -116,20 +122,7 @@ results <- lapply(Ids_toDo, function(studyId)try({
                                    individual_id=ind,
                                    attributes = c("individual_local_identifier","deployment_id"),
                                    timestamp_end=as.POSIXct(Sys.time(), tz="UTC")) # to avoid locations in the future
-    
-  ## assigning 'individual_local_identifier' always as track id. If there is a timegap between deployments, this will be accounted for in the movetrais calculation as any other gap within the data
-    if("individual_local_identifier" %in% names(mt_track_data(mv2))){
-      indiv <- as.character(unique(mt_track_data(mv2)$individual_local_identifier))
-      if(any(grepl("/", indiv)==T)){indiv <- gsub("/","-",indiv)}
-      print(indiv)
-    }else if("individual_local_identifier" %in% names(mv2)){
-      indiv <- as.character(unique(mv2$individual_local_identifier))
-      if(any(grepl("/", indiv)==T)){indiv <- gsub("/","-",indiv)}
-      print(indiv)
-    }else{
-      indiv <- mt_track_data(mv2)$individual_id
-      print(indiv)
-    }
+
     saveRDS(mv2, file=paste0(pthDownld,studyId,"_",ind,".rds"))
   }))
 }))
