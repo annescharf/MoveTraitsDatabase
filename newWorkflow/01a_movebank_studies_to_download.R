@@ -34,11 +34,6 @@ all_shared$access <- "MoveTraits"
 
 ### searching for public studies
 all <- movebank_download_study_info() # some studies have years in weird formats, just ignore this warning message
-all <- all[grep("GPS", all$sensor_type_ids),] # studies can have multiple sensors, making sure gps is included
-all <- all[all$number_of_deployed_locations > units::set_units(0,"count"),] # removing those with 0 locations
-all <- all[!is.na(all$number_of_deployed_locations),] # removing those with no deployed locations
-all <- all[!is.na(all$taxon_ids),] ## removing those with NO taxon
-all <- all[!all$is_test==T,] ## removing studies marked as tests
 all_open <- all[which(all$license_type %in% c("CC_0","CC_BY","CC_BY_NC")),] 
 ## - CC_O: can use the data, do not need to mention names
 ## - CC_BY: can use the data, but names of owners should appear somewhere
@@ -48,14 +43,22 @@ all_open$access <- "open"
 ### making one large table and removing duplicated studies
 allstudies <- rbind(all_shared,all_open)
 allstudies <- allstudies[!duplicated(allstudies$id),] ## when duplicated, entry from all shared will be kept
+###--### in case the people should be contacted
+allstudies_noTaxon <- allstudies[is.na(allstudies$taxon_ids),] 
+saveRDS(allstudies_noTaxon, paste0(pathTOfolder,"studies_w_no_taxon.rds"))
+###--####
+allstudies <- allstudies[!is.na(allstudies$taxon_ids),] ## removing those with NO taxon
+allstudies <- allstudies[grep("GPS", allstudies$sensor_type_ids),] # studies can have multiple sensors, making sure gps is included
+allstudies <- allstudies[allstudies$number_of_deployed_locations > units::set_units(0,"count"),] # removing those with 0 locations
+allstudies <- allstudies[!is.na(allstudies$number_of_deployed_locations),] # removing those with no deployed locations
+allstudies <- allstudies[!allstudies$is_test==T,] ## removing studies marked as tests
 allstudies$download_date <- Sys.Date()
 ## for testing
 # textstd <- c(404939825,183770262,1764627) # 2 studies of eidolon sharing same indiv, 1 study of buffalo w/ multiple deployments
 # allstudies <- allstudies[allstudies$id%in%textstd,]
 saveRDS(allstudies, paste0(pathTOfolder,"full_table_all_studies.rds"))
 
-allstudies_noTaxon <- allstudies[is.na(allstudies$taxon_ids),] ## in case the people should be contacted
-saveRDS(allstudies_noTaxon, paste0(pathTOfolder,"studies_w_no_taxon.rds"))
+
 
 metadata_studies <- allstudies[,c(
   "id",

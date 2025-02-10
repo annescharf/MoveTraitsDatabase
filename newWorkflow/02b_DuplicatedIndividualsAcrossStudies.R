@@ -375,7 +375,7 @@ lapply(checkL, function(y)try({
   mv2 <- mt_as_track_attribute(mv2,"keep",.keep=T)
   mv2 <- mt_filter_per_interval(mv2,criterion="first",unit="day") # making plots lighter
   jpeg(file=paste0(plotPth,mt_track_id(mv2)[1],".jpg"), width=20, height=12, units="cm", res=150)
-  pl <- ggplot(data=mt_track_lines(mv2))+geom_sf(aes(color=keep))+facet_wrap(~fileName+individual_local_identifier,nrow=1)
+  pl <- ggplot(data=mt_track_lines(mv2))+geom_sf(aes(color=keep))+facet_wrap(~fileName+tag_local_identifier+individual_local_identifier,nrow=1)+ggtitle("filename / tag name / indiv name")
   print(pl)
   dev.off()
 }))
