@@ -54,5 +54,5 @@ table(is.na(referenceTableStudies_ALL$animal_life_stage))
 table(referenceTableStudies_ALL$animal_life_stage)
 
 saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn_more_metadata.rds"))
-## use this table to merge all metadata with resulting traits. This table contains one row per individual-tag combination, ie, one individual can be split up among several lines if if had several tags. For merging use the columns: "study_id","individual_id","individual_local_identifier","tag_local_identifier". (Using ,"individual_local_identifier" and "individual_id" because individual_local_identifier is empty for some studies)
+## use this table to merge all metadata with resulting traits. This table contains one row per individual-tag combination, ie, one individual can be split up among several lines if if had several tags. For merging use the columns: "study_id","individual_id", "tag_local_identifier". 
 

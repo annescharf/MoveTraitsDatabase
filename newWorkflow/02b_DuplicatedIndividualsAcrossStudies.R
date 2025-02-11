@@ -63,6 +63,7 @@ referenceTableStudies <-  function(path_to_indv_move2){
       fileName = fileName,
       MBid = tag_td$study_id,
       individual_local_identifier = as.character(tag_td$individual_local_identifier),
+      individual_id = tag_td$individual_id,
       tag_local_identifier = as.character(tag_td$tag_local_identifier),
       deployment_id = as.character(tag_td$deployment_id),
       # species = if(!is.null(tag_td$taxon_canonical_name)){tag_td$taxon_canonical_name}else{NA},
