@@ -20,11 +20,15 @@ library(move2)
 library(units)
 library(dplyr)
 
-# keyring::key_list()
-options("move2_movebank_key_name" = "MoveTraits")
+#movebank_store_credentials(username = "MoveTraits",
+#                           password = "XXX")
 
-dir.create("MoveTraitsData")
-pathTOfolder <- "./MoveTraitsData/"
+# keyring::key_list()
+#options("move2_movebank_key_name" = "MoveTraits")
+options("move2_movebank_key_name" = "movebank")
+
+dir.create("DATA/MoveTraitsData")
+pathTOfolder <- "./DATA/MoveTraitsData/"
 
 #### downloading studies to which the user "MoveTraits" has been added as collaborator or manager
 # download list of studies available through this account

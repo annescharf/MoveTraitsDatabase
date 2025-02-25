@@ -18,7 +18,7 @@ library(dplyr)
 # registerDoParallel(mycores)
 # library(dplyr)
 
-pathTOfolder <- "./MoveTraitsData/"
+pathTOfolder <- "./DATA/MoveTraitsData/"
 pthDownld <- paste0(pathTOfolder,"1.MB_indv_mv2/")
 dir.create(paste0(pathTOfolder,"2.MB_indv_mv2_clean"))
 pthClean <- paste0(pathTOfolder,"2.MB_indv_mv2_clean/")

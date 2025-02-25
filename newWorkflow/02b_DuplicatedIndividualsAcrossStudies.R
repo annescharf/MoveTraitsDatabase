@@ -94,7 +94,7 @@ referenceTableStudies <-  function(path_to_indv_move2){
 ## create Individuals reference table ##
 #######--------------------------#######
 # Create a reference table, one entry per individual-tag combination: #####
-pathTOfolder <- "./MoveTraitsData/"
+pathTOfolder <- "./DATA/MoveTraitsData/"
 pthClean <- paste0(pathTOfolder,"2.MB_indv_mv2_clean/")
 flsMV <- list.files(pthClean, full.names = T)
 
@@ -345,7 +345,7 @@ saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStud
 library(move2)
 library(ggplot2)
 
-pathTOfolder <- "./MoveTraitsData/"
+pathTOfolder <- "./DATA/MoveTraitsData/"
 pthClean <- paste0(pathTOfolder,"2.MB_indv_mv2_clean/")
 dir.create(paste0(pathTOfolder,"3.duplicated_plots"))
 plotPth <- paste0(pathTOfolder,"3.duplicated_plots/")

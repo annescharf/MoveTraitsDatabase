@@ -15,7 +15,7 @@ library(units)
 library(sf)
 library(dplyr)
 
-pathTOfolder <- "./MoveTraitsData/"
+pathTOfolder <- "./DATA/MoveTraitsData/"
 referenceTableStudies <- readRDS(paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 referenceTableStudiesUsed <- referenceTableStudies[referenceTableStudies$excluded=="no",]
 head(referenceTableStudiesUsed)
