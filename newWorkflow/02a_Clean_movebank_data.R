@@ -27,7 +27,6 @@ flsMV <- list.files(pthDownld, full.names = F)
 done <- list.files(pthClean, full.names = F)
 flsMV <- flsMV[!flsMV%in%done]
 
-
 # indPth <- flsMV[10]
 
 ## remove empty locs, 0,0 corrds and duplicated ts

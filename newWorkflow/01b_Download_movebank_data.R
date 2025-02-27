@@ -34,6 +34,8 @@ pthDownld <- paste0(pathTOfolder,"1.MB_indv_mv2/")
 allstudies <- readRDS(paste0(pathTOfolder,"full_table_all_studies.rds"))
 Ids_toDo <- allstudies$id 
 
+Ids_toDo <- LOUP
+
 #### download by individual. object "result" only contains the error messages ######
 start_time <- Sys.time()
 # studyId <- Ids_toDo[1]

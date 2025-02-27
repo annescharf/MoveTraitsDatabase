@@ -24,6 +24,11 @@ flsMV <- list.files(pthamt1h, full.names = F)
 done <- list.files(pthtraitsum, full.names = F)
 flsMV <- flsMV[!flsMV%in%done]
 
+#referenceTableStudies <- readRDS(paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
+#referenceTableStudiesUsed <- referenceTableStudies[referenceTableStudies$excluded=="no",]
+
+#flsMV <- flsMV[flsMV %in% referenceTableStudiesUsed$fileName]
+
 #flsMV <- flsMV[118:121]
 
 
@@ -576,7 +581,7 @@ FMaxDispl7d<-function(x)
   # Check if the input is NULL
   if (is.null(x)) {
     # Create a placeholder dataframe with NA values
-    dats <- data.frame(individual_id = NA,dmax7d.weeks = NA,
+    dats <- data.frame(individual_id = NA,n.dmax7d.weeks = NA,
                        dmax7d.mean = NA,dmax7d.median = NA,dmax7d.cv = NA,dmax7d.95 = NA,dmax7d.05 = NA)
   } else {
     

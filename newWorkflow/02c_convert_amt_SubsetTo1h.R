@@ -25,7 +25,11 @@ pthClean <- paste0(pathTOfolder,"2.MB_indv_mv2_clean/")
 dir.create(paste0(pathTOfolder,"4.MB_indv_amt_1h"))
 pthamt1h <- paste0(pathTOfolder,"4.MB_indv_amt_1h/")
 
-flsMV2 <- as.character(referenceTableStudiesUsed$fileName)
+flsMV <- list.files(pthClean, full.names = F)
+done <- list.files(pthamt1h, full.names = F)
+flsMV2 <- flsMV[!flsMV%in%done]
+
+#flsMV2 <- as.character(referenceTableStudiesUsed$fileName)
 
 ####### convert tracks to amt and thin to 1h ###########
 
@@ -47,7 +51,7 @@ results <- lapply(flsMV2, function(ind)try({
                   t=mt_time(mv2),
                   crs = sf::st_crs(mv2))
   ## remove geometry column and deployment_id if present as they are of no use
-  amt_tr <- amt_tr %>% select(!geometry)
+  amt_tr <- amt_tr %>% dplyr::select(!geometry)
   if("deployment_id"%in%names(amt_tr)){amt_tr <- amt_tr %>% select(!deployment_id)}
   
   amt_tr_1h <- amt_tr |> track_resample(rate = hours(1),
