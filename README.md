@@ -22,7 +22,9 @@ Movebank studies to download are idnetified in *01a_movebank_studies_to_download
 Traits database at three hierarchichal levels: species summaries, individual summaries, underlying within-individual traits as nested dataframe
 
 *MoveTrait.v0.1_species.sum_03032025.rds*
+
 *MoveTrait.v0.1_individual.sum_03032025.rds*
+
 *MoveTrait.v0.1_withinindividual_03032025.rds*
 
 
