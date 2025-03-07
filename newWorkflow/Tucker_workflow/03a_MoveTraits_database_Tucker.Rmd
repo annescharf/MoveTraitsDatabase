@@ -49,6 +49,8 @@ colnames(movedata)
 ```{r select columns}
 movedata <- movedata[,c("Species","ID","TimestampUTC","Latitude", "Longitude","BodyMass_kg","ContactPerson")]
 
+colnames(movedata) <- c("species","individual_id","TimestampUTC","Latitude","Longitude", "animal_mass","contact_person_name")
+
 head(movedata)
 ```
 
@@ -59,17 +61,16 @@ movedata <-
   movedata %>% 
   mutate(
     OrdinalDay = lubridate::yday(TimestampUTC),
-    Year = lubridate::year(TimestampUTC),
-    Month = lubridate::month(TimestampUTC),
-    Hour = lubridate::hour(TimestampUTC))
+    year = lubridate::year(TimestampUTC),
+    month = lubridate::month(TimestampUTC),
+    hour = lubridate::hour(TimestampUTC))
 
-attr(movedata$TimestampUTC, "tzone") <- "UTC"
 ```
 
 Keep only data from 2019, i.e. not during Covid lockdowns
 ```{r select time}
 movedata <- movedata %>% 
-  filter(Year < 2020)
+  filter(year < 2020)
 ```
 
 # Resample data to 1h, 24h time scales
@@ -84,15 +85,15 @@ make_and_resample_track <- function(x, sampling.interval = 1, tolerance = 15){
              Longitude, 
              Latitude, 
              TimestampUTC, 
-             ID = ID, 
-             Species = Species, 
-             ContactPerson = ContactPerson, 
-             BodyMass_kg = BodyMass_kg,
+             individual_id = individual_id, 
+             species = species, 
+             contact_person_name = contact_person_name, 
+             animal_mass = animal_mass,
              OrdinalDay = OrdinalDay, 
-             Year = Year, 
-             Month = Month, 
-             Hour = Hour, 
-             crs = sp::CRS("+init=epsg:4326")) %>%
+             year = year, 
+             month = month, 
+             hour = hour, 
+             crs = 4326) %>%
     track_resample(., rate = hours(sampling.interval),
                    tolerance = minutes(tolerance)) %>%
     return()
@@ -103,41 +104,39 @@ Resample to 1hr and to 24 hrs. We start with unstratified
 
 ```{r resample locs, warning=FALSE,message=FALSE}
 animlocs.1hourly <- movedata %>% 
-  group_by(ID) %>% 
+  group_by(individual_id) %>% 
   group_split() %>% 
   map(~ make_and_resample_track(., sampling.interval = 1, 
                                  tolerance = 15)) %>% 
-  setNames(unique(movedata$t_ani_id)) %>% 
+  setNames(unique(movedata$individual_id)) %>% 
   do.call("rbind", .) 
 
-animlocs.daily <- movedata %>% 
-  group_by(ID) %>% 
-  group_split() %>% 
-  map(~ make_and_resample_track(., sampling.interval = 24, 
-                                tolerance = 15)) %>% 
-  setNames(unique(movedata$ID)) %>% 
-  do.call("rbind", .) 
+animlocs.daily <- movedata %>%
+  group_by(individual_id) %>%
+  group_split() %>%
+  map(~ make_and_resample_track(., sampling.interval = 24,
+                                tolerance = 15)) %>%
+  setNames(unique(animlocs.1hourly$individual_id)) %>%
+  do.call("rbind", .)
 ```
 
 We then create a new resampled data set with both hourly and daily relocation intervals and the metadata for each track.
 
 ```{r build resampled dataset,warning=FALSE}
 data_resampled <- movedata %>%
-  tidyr::nest(-ID) %>% 
+  tidyr::nest(-individual_id) %>% 
   dplyr::select(-data) %>% # just a quick trick to keep things flowing.
-  left_join(., movedata[!duplicated(movedata$ID),c("Species","ID","BodyMass_kg","ContactPerson")], 
-            by = c("ID" = "ID")) %>% 
+  left_join(., movedata[!duplicated(movedata$individual_id),c("species","individual_id","animal_mass","contact_person_name")], 
+            by = c("individual_id" = "individual_id")) %>% 
   # 1 hourly
   left_join(.,  animlocs.1hourly %>%
-              mutate(id = ID) %>% 
-              tidyr::nest(-ID), 
-            by = c("ID" = "ID")) %>% 
+              tidyr::nest(-individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(animlocs.1hourly = data) %>% 
   # daily 
   left_join(.,  animlocs.daily %>%
-            mutate(id = ID) %>% 
-            tidyr::nest(-ID),
-          by = c("ID" = "ID")) %>%
+            tidyr::nest(-individual_id),
+          by = c("individual_id" = "individual_id")) %>%
   dplyr::rename(animlocs.daily = data)
 ```
 
@@ -148,83 +147,53 @@ The distance moved over a given time period, based on a specific GPS relocation 
 
 ### 1hr displacement distance
 As input to calculate hourly displacement we use the resampled hourly dataset. We only include individuals with at least 167 hourly relocations, which is equivalent to 1 week of data.
+
 ```{r prepare 1h locs}
-locs1h <- flatten(data_resampled[,"animlocs.1hourly"]) %>%  bind_rows() %>% tibble() %>% 
-  group_by(id) %>% filter(n() > 167) %>% ungroup() %>% droplevels()
-
-coordinates(locs1h) <- c("x_","y_")
-proj4string(locs1h) <- CRS("+init=epsg:4326")
-```
-
-We use the adehabitatLT package to create a regular tarjectory, i.e. distances are only calculated for subseqeunt GPS positions.
-```{r 1h trajectory}
-traj1h<-as.ltraj(xy = coordinates(locs1h),
-               date = locs1h$t_,
-               id = locs1h$id)
-
-refda <- min(locs1h@data$t_)
-
-traj1h<- setNA(traj1h, refda, dt = 1, units="hour")
-traj1h <- sett0(traj1h, refda, 1 , units="hour")
-```
-
-Cleaning of the trajectory - i.e. remove days with missing distances, convert distances to meters, select onyl relevant columns
-```{r 1h displacements}
-df.traj1h <- ld(traj1h)
-df.traj1h <- df.traj1h[,c(11,3,6,1,2)]
-colnames(df.traj1h)<- c("ID","TimestampUTC","D1h","x","y")
-df.traj1h$D1h <- df.traj1h$D1h*100000
-df.traj1h <- df.traj1h[!is.na(df.traj1h$D1h),]
-df.traj1h$OrdinalDay <- lubridate::yday(df.traj1h$TimestampUTC)
-df.traj1h$YMD <- as.character(format(as.Date(df.traj1h$TimestampUTC), "%Y-%m-%d"))
+animlocs.1hourly_sl <- 
+  animlocs.1hourly |> filter(n() > 167) %>% 
+  mutate(d1h = step_lengths(.)*100000) |> 
+  dplyr::select(individual_id, t_, d1h, x_, y_) |> 
+  mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
+  filter(!is.na(d1h))
 ```
 
 ### Maximum 24hr displacement
 Group all GPS relocations within a 24hr interval. Include only days with at least 12 relocations. Calculate all pairwise distances and select the maximum distance observed. Keep only individuals with at least 7 days of data
 
 ```{r max 24hr displacement, class.source = 'fold-hide'}
-locs1h <- flatten(data_resampled[,"animlocs.1hourly"]) %>%  bind_rows() %>% tibble() %>% 
-   mutate(YMD = as.character(format(as.Date(t_), "%Y-%m-%d")))
-
-locs1h <- locs1h %>% filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% filter(!is.na(t_)) %>% filter(!is.na(id))
-
-locs1h <- locs1h %>% 
-  mutate(id.YMD = paste(id,YMD,sep="_")) |> 
-  group_by(id,YMD) %>% 
+locs1h <- animlocs.1hourly %>% 
+  mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
+  mutate(id.ymd = paste(individual_id,ymd,sep="_")) |> 
+  group_by(id.ymd) %>% 
   filter(n() >= 12) %>%
   ungroup() 
 
-      mean.coord <- locs1h |> group_by(id.YMD) |> 
-        mutate(mean.x = mean(x_, na.rm=T),
-               mean.y = mean(y_, na.rm=T)) |> 
-        dplyr::select(id.YMD, mean.x, mean.y) |> distinct()
+mean.coord <- locs1h |> group_by(id.ymd) |> 
+  mutate(mean.x = mean(x_, na.rm=T),
+         mean.y = mean(y_, na.rm=T)) |> 
+  dplyr::select(id.ymd, mean.x, mean.y) |> distinct()
 
-coordinates(locs1h) <- c("x_","y_")
-proj4string(locs1h) <- CRS("+init=epsg:4326")
+locs1h.sf <- sf::st_as_sf(locs1h,
+                          coords = c("x_", "y_"),
+                          crs = 4326)
 
-mydata <- split(locs1h, list(locs1h$id, locs1h$YMD), drop = TRUE) 
+moveObjSplitTime <- split(locs1h.sf, locs1h$id.ymd)
+maxNetDispL <- lapply(moveObjSplitTime, function(x){max(sf::st_distance(x))})
+maxNetDisp <- do.call("rbind",maxNetDispL)
 
-Dmax24 <- sapply(mydata, function(mydata){
-  d <- geosphere::distm(mydata)
-  d <- d[upper.tri(d)]
-  max24displ <- max(d)
-})
+rm(moveObjSplitTime);rm(maxNetDispL);rm(locs1h);rm(locs1h.sf)
 
-Dmax24 <- data.frame(keyName=names(Dmax24), Dmax24=Dmax24, row.names=NULL)
-Dmax24$YMD <- str_split(Dmax24$keyName, '[.]', simplify = TRUE)[,2]
-Dmax24$ID <- str_extract(Dmax24$keyName, "[^.]+")
-Dmax24 <- Dmax24[,c(4,3,2)]
-
-Dmax24 <- Dmax24 %>% 
-  group_by(ID) %>% 
+dmax24 <- 
+    data.frame(keyName=row.names(maxNetDisp), dmax24h=maxNetDisp[,1], row.names=NULL) |> 
+      mutate(ymd = str_sub(keyName, -10),
+             individual_id = str_extract(keyName, "^[^_]*_[^_]*")) |> 
+  filter(!is.na(dmax24h)) |>  
+  group_by(individual_id) |>  
   filter(n() >= 7) %>%
   ungroup() |> 
-  mutate(id.YMD = paste(ID,YMD,sep="_")) |> 
-  left_join(mean.coord, by = "id.YMD") |> 
-  dplyr::select(ID,YMD,Dmax24, mean.x, mean.y)
-
-Dmax24$OrdinalDay <- lubridate::yday(as.Date(Dmax24$YMD))
-Dmax24$JulianDay <- as.numeric(julian(as.Date(Dmax24$YMD)))
+  mutate(id.ymd = paste(individual_id,ymd,sep="_")) |> 
+  left_join(mean.coord, by = "id.ymd") |> 
+  dplyr::select(individual_id,ymd,dmax24h, mean.x, mean.y) 
 
 rm(mean.coord);rm(locs1h)
 ```
@@ -233,85 +202,53 @@ rm(mean.coord);rm(locs1h)
 Straight line displacement distance between 24hr relocations. Include only individual which have relocation data on at least 30 days (1 month of data)
 
 ```{r 24hr displacement, class.source = 'fold-hide'}
-locs24h <- flatten(data_resampled[,"animlocs.daily"]) %>% bind_rows() %>% tibble() %>% 
-  mutate(week = as.numeric(strftime(t_,format="%W"))) %>% 
-  group_by(id) %>% filter(n() > 30) %>% ungroup() %>% droplevels()
-
-locs24h <- locs24h %>% filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% filter(!is.na(t_)) %>% filter(!is.na(id))
-
-coordinates(locs24h) <- c("x_","y_")
-proj4string(locs24h) <- CRS("+init=epsg:4326")
-
-## create a regular 24 hr trajectory and calculate step lengths in adehabitat
-traj.24h<-as.ltraj(xy = coordinates(locs24h),
-               date = locs24h$t_,
-               id = locs24h$id)
-
-refda <- min(locs24h@data$t_)
-
-traj.24h<- setNA(traj.24h, refda, dt = 1, units="day")
-traj.24h <- sett0(traj.24h, refda, 1 , units="day")
-df.traj.24h <- ld(traj.24h)
-df.traj.24h <- df.traj.24h[,c(11,3,6,1,2)]
-colnames(df.traj.24h)<- c("ID","TimestampUTC","D24h","x","y")
-
-# convert distances to meters
-df.traj.24h$D24h <- df.traj.24h$D24h*100000
-
-#remove missing hourly steps
-df.traj.24h <- df.traj.24h[!is.na(df.traj.24h$D24h),]
-df.traj.24h$Month <- lubridate::month(df.traj.24h$TimestampUTC)
-df.traj.24h$OrdinalDay <- lubridate::yday(df.traj.24h$TimestampUTC)
-df.traj.24h$JulianDay <- as.numeric(julian(as.Date(df.traj.24h$TimestampUTC)))
-df.traj.24h$Year <- lubridate::year(df.traj.24h$TimestampUTC)
-
-rm(traj.24h);rm(locs24h)
+animlocs.daily_sl <- animlocs.daily |> 
+  filter(n() > 30) %>% 
+  mutate(d24h = step_lengths(.)*100000) |> 
+  dplyr::select(individual_id, t_, d24h, x_, y_) |> 
+  mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d")),
+         month = lubridate::month(t_),
+         year = lubridate::year(t_))|> 
+  filter(!is.na(d24h))
 ```
 
 ### Maximum 7day displacement distance
 Based on daily (24h) relocations we calculate the maximum weekly displacemnt from all pairwise comparisons including only weeks with at least 5 relocation and individuals with at least 10 weeks of data.
 
 ```{r class.source = 'fold-hide'}
-locs24h <- flatten(data_resampled[,"animlocs.daily"]) %>% bind_rows() %>% tibble() %>%
+locs24h <- animlocs.daily |> 
   mutate(week = as.numeric(strftime(t_,format="%W")), year = as.numeric(strftime(t_,format="%Y")),
-         year_week = paste(year,week, sep="_")) 
+         year_week = paste(year,week, sep="_")) |> 
+  mutate(id.year_week = paste(individual_id,year_week,sep="_")) |>  
+  group_by(individual_id,year_week) |> filter(n() >= 5) |> ungroup()
 
-locs24h <- locs24h %>% filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% filter(!is.na(t_)) %>% filter(!is.na(id))
+mean.coord <- locs24h |> group_by(id.year_week) |> 
+  mutate(mean.x = mean(x_, na.rm=T),
+         mean.y = mean(y_, na.rm=T)) |> 
+  dplyr::select(id.year_week, mean.x, mean.y) |> distinct()
 
-locs24h <- locs24h %>% 
-  mutate(id.year_week = paste(id,year_week,sep="_")) %>% 
-  group_by(id,year_week) %>% 
-  filter(n() >= 5) %>%
-  ungroup()
+locs24h.sf <- sf::st_as_sf(locs24h,
+                          coords = c("x_", "y_"),
+                          crs = 4326)
 
-      mean.coord <- locs24h |> group_by(id.year_week) |> 
-        mutate(mean.x = mean(x_, na.rm=T),
-               mean.y = mean(y_, na.rm=T)) |> 
-        dplyr::select(id.year_week, mean.x, mean.y) |> distinct()
+moveObjSplitTime <- split(locs24h.sf, locs24h.sf$id.year_week)
+maxNetDispL <- lapply(moveObjSplitTime, function(x){max(sf::st_distance(x))})
+maxNetDisp <- do.call("rbind",maxNetDispL)
 
-coordinates(locs24h) <- c("x_","y_")
-proj4string(locs24h) <- CRS("+init=epsg:4326")
+rm(moveObjSplitTime);rm(maxNetDispL);rm(locs24h);rm(locs24h.sf)
 
-mydata <- split(locs24h, list(locs24h$id, locs24h$year_week), drop = TRUE)
-
-Dmax7d <- sapply(mydata, function(mydata){
-  d <- geosphere::distm(mydata)
-  d <- d[upper.tri(d)]
-  max7ddispl <- max(d)
-})
-
-Dmax7d <- data.frame(keyName=names(Dmax7d), Dmax7d=Dmax7d, row.names=NULL)
-
-Dmax7d$week = as.numeric(stringr::str_extract(Dmax7d$keyName, "(\\d+$)"))
-Dmax7d$year_week <- str_extract(Dmax7d$keyName, "[^.]*$")
-Dmax7d$ID <- str_extract(Dmax7d$keyName, "[^.]+")
-
-Dmax7d <- Dmax7d %>% group_by(ID) %>% filter(n() >= 10) %>% ungroup() %>% 
-  mutate(id.year_week = paste(ID,year_week,sep="_")) %>% 
+dmax7d <- 
+  data.frame(keyName=row.names(maxNetDisp), dmax7d=maxNetDisp[,1], row.names=NULL) |> 
+  mutate(week = str_sub(keyName, -2),
+         year_week = str_sub(keyName, -7),
+         individual_id = str_extract(keyName, "^[^_]*_[^_]*")) |> 
+  filter(!is.na(dmax7d))|> 
+  group_by(individual_id) |>  filter(n() >= 10) |> ungroup() |>  
+  mutate(id.year_week = paste(individual_id,year_week,sep="_")) |> 
   left_join(mean.coord, by = "id.year_week") |> 
-  dplyr::select(ID,week, year_week,Dmax7d,mean.x, mean.y)
+  dplyr::select(individual_id,week, year_week,dmax7d,mean.x, mean.y) 
 
-rm(mean.coord);rm(locs24h);rm(mydata)
+rm(mean.coord)
 ```
 
 ## Range size - MCPs
@@ -321,10 +258,10 @@ The are used within a given time period. We opted to calculate area use as simpl
 Daily range used based on hourly relocations including only individuals with at least 12 locations on a given day.
 
 ```{r,message=FALSE,warning=FALSE}
-dat.mcp.daily <- flatten(data_resampled[,"animlocs.1hourly"]) %>% bind_rows() %>% 
-  tibble() %>% mutate(YMD = as.character(format(as.Date(t_), "%Y-%m-%d")))  %>%
+dat.mcp.daily <- animlocs.1hourly %>% 
+  tibble() %>% mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d")))  %>%
   filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% 
-  mutate(id.day = paste(id,YMD,sep=".")) %>% group_by(id.day) %>% filter(n() > 12) %>% ungroup() %>% 
+  mutate(id.day = paste(individual_id,ymd,sep=".")) %>% group_by(id.day) %>% filter(n() > 12) %>% ungroup() %>% 
   dplyr::select(x_,y_,id.day) 
 
       mean.coord <- dat.mcp.daily |> group_by(id.day) |> 
@@ -342,9 +279,9 @@ dat.mcp.daily <- spTransform(dat.mcp.daily,sp::CRS("+proj=moll +lon_0=0 +x_0=0 +
 
 mcp.daily <- mcp(dat.mcp.daily, percent = 95, unout = c( "m2")) %>% data.frame() %>% 
     left_join(mean.coord, by = c("id" = "id.day")) |> 
-  mutate(YMD = str_split(id, '[.]', simplify = TRUE)[,2],
-         ID = str_split(id, '[.]', simplify = TRUE)[,1]) %>% 
-  dplyr::select(ID,YMD,area, mean.x, mean.y)
+  mutate(ymd = str_split(id, '[.]', simplify = TRUE)[,2],
+         individual_id = str_split(id, '[.]', simplify = TRUE)[,1]) %>% 
+  dplyr::select(individual_id,ymd,area, mean.x, mean.y)
 rownames(mcp.daily) <- NULL  
 
 rm(mean.coord);rm(dat.mcp.daily)
@@ -354,11 +291,11 @@ rm(mean.coord);rm(dat.mcp.daily)
 Weekly range size based on 1h data with at least 84 hourly relocations (3.5 days)
 
 ```{r class.source = 'fold-hide',message=FALSE,warning=FALSE}
-dat.mcp.weekly <- flatten(data_resampled[,"animlocs.1hourly"]) %>% bind_rows() %>%  tibble() %>% 
+dat.mcp.weekly <- animlocs.1hourly %>% 
  mutate(week = as.numeric(strftime(t_,format="%W")), 
         year = as.numeric(strftime(t_,format="%Y")),
          year_week = paste(year,week, sep="_")) %>% 
-  mutate(id.week = paste(id,year_week,sep=".")) %>% 
+  mutate(id.week = paste(individual_id,year_week,sep=".")) %>% 
   filter(!is.na(x_)) %>% filter(!is.na(y_)) %>%
   group_by(id.week) %>% filter(n() > 84) %>% ungroup() %>% 
   dplyr::select(x_,y_,id.week) 
@@ -371,16 +308,15 @@ dat.mcp.weekly <- flatten(data_resampled[,"animlocs.1hourly"]) %>% bind_rows() %
 coordinates(dat.mcp.weekly) <- c("x_","y_")
 proj4string(dat.mcp.weekly) <- CRS("+init=epsg:4326")
 
-# Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
 dat.mcp.weekly <- spTransform(dat.mcp.weekly,
-                              sp::CRS("+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
+                              sp::CRS("+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
 
-mcp.weekly <- mcp(dat.mcp.weekly, percent = 95, unout = c( "m2")) %>% data.frame() %>%
+mcp.weekly <- mcp(dat.mcp.weekly, percent = 95, unout = c("m2")) %>% data.frame() %>%
   left_join(mean.coord, by = c("id" = "id.week")) |> 
   mutate(week = as.numeric(stringr::str_extract(id, "(\\d+$)")),
          year_week = stringr::str_extract(id, "[^.]*$"),
-         ID = str_extract(id, "[^.]+")) |> 
-  dplyr::select(ID, week, year_week, area, mean.x, mean.y)
+         individual_id = str_extract(id, "[^.]+")) |> 
+  dplyr::select(individual_id, week, year_week, area, mean.x, mean.y)
 
 rm(dat.mcp.weekly);rm(mean.coord)
 ```
@@ -389,9 +325,9 @@ rm(dat.mcp.weekly);rm(mean.coord)
 Monthly MCPs with based on daily relocations, include only individulas with at least 14 days of data
 
 ```{r class.source = 'fold-hide',message=FALSE,warning=FALSE}
-dat.mcp.monthly <- flatten(data_resampled[,"animlocs.daily"]) %>% bind_rows() %>% 
-  tibble() %>% mutate(year_month = paste(Year,Month,sep="_")) |> 
-  mutate(id.month = paste(id,year_month,sep=".")) %>% 
+dat.mcp.monthly <- animlocs.daily |>  
+  mutate(year_month = paste(year,month,sep="_")) |> 
+  mutate(id.month = paste(individual_id,year_month,sep=".")) %>% 
   filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% group_by(id.month) %>% 
   filter(n() > 14) %>% ungroup() %>% dplyr::select(x_,y_,id.month) 
 
@@ -404,13 +340,13 @@ coordinates(dat.mcp.monthly) <- c("x_","y_")
 proj4string(dat.mcp.monthly) <- CRS("+init=epsg:4326")
 
 # Bonne equal area projection - https://spatialreference.org/ref/esri/54024/
-dat.mcp.monthly <- spTransform(dat.mcp.monthly,sp::CRS("+proj=bonne +lat_1=60 +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
+dat.mcp.monthly <- spTransform(dat.mcp.monthly,sp::CRS("+proj=moll +lon_0=0 +x_0=0 +y_0=0 +datum=WGS84 +units=m +no_defs +type=crs"))
 
 mcp.monthly <- mcp(dat.mcp.monthly, percent = 95, unout = c("m2")) %>% data.frame() %>%   left_join(mean.coord, by = c("id" = "id.month")) |> 
   mutate(month = as.numeric(stringr::str_extract(id, "(\\d+$)")),
          year_month = stringr::str_extract(id, "[^.]*$"),
-         ID = str_extract(id, "[^.]+")) %>% 
-  dplyr::select(ID,month,year_month,area, mean.x, mean.y)
+         individual_id = str_extract(id, "[^.]+")) %>% 
+  dplyr::select(individual_id,month,year_month,area, mean.x, mean.y)
 
 rm(dat.mcp.monthly);rm(mean.coord)
 ```
@@ -422,37 +358,37 @@ Intensity is defined as the cummulative movement distance during a set time peri
 ### Daily Intensity of Use (IoU)
 
 ```{r}
-mcp.daily$ID_Day<-paste(mcp.daily$ID,mcp.daily$YMD,sep=".")
+mcp.daily$id.day<-paste(mcp.daily$individual_id,mcp.daily$ymd,sep=".")
   
-df.IoU24h <- df.traj1h %>% 
-  data.frame %>% 
-  mutate(ID_Day = paste(ID,YMD,sep=".")) %>% group_by(ID_Day) %>% 
-  mutate(cumsumD1h = sum(D1h),
-         mean.x = mean(x),
-         mean.y = mean(y)) %>% 
-  dplyr::select(ID_Day,YMD,ID,cumsumD1h,mean.x,mean.y) %>% distinct() %>%
-  left_join(mcp.daily[,c("ID_Day","area")],by = "ID_Day") %>% 
-  mutate(IOU24h = cumsumD1h/sqrt(area)) %>% 
-  filter(!is.na(IOU24h))
+df.IoU24h <- animlocs.1hourly_sl %>% 
+  mutate(id.day = paste(individual_id,ymd,sep=".")) %>% 
+  group_by(id.day) %>% 
+  mutate(cumsum.d1h = sum(d1h,na.rm=T),
+         mean.x = mean(x_),
+         mean.y = mean(y_)) %>% 
+  dplyr::select(individual_id,ymd,cumsum.d1h,mean.x,mean.y) %>% distinct() %>%
+  left_join(mcp.daily[,c("id.day","area")],by = "id.day") %>% 
+  mutate(iou24h = cumsum.d1h/sqrt(area)) %>% 
+  filter(!is.na(iou24h))
 ```
 
 ### Monthly Intensity of Use
-```{r class.source = 'fold-hide',message=FALSE,warning=FALSE}
-mcp.monthly$ID_Month = paste(mcp.monthly$ID,mcp.monthly$year_month,sep=".")
 
-df.IoU1m <- df.traj.24h  %>%  
-  data.frame  |> 
-  mutate(year_month = paste(Year,Month,sep="_")) |> 
-  mutate(ID_Month = paste(ID,year_month,sep=".")) %>% group_by(ID_Month)  |>  
-  mutate(cumsumD24h = sum(D24h),
-         mean.x = mean(x),
-         mean.y = mean(y))  |>  
-  dplyr::select(ID_Month,Month,year_month,ID,cumsumD24h,mean.x,mean.y)  |>
+```{r class.source = 'fold-hide',message=FALSE,warning=FALSE}
+mcp.monthly$id_month = paste(mcp.monthly$individual_id,mcp.monthly$year_month,sep=".")
+
+df.IoU1m <-   animlocs.daily_sl  %>%  
+  mutate(year_month = paste(year,month,sep="_"),
+         id_month = paste(individual_id,year_month,sep="."))  |>  group_by(id_month)  |>  
+  mutate(cumsum.d24h = sum(d24h,na.rm=T),
+         mean.x = mean(x_),
+         mean.y = mean(y_))  |>  
+  dplyr::select(individual_id,id_month,month,year,year_month,cumsum.d24h,mean.x,mean.y)  |>
   distinct() |> 
-  left_join(mcp.monthly[,c("ID_Month","area")],by = "ID_Month")  |>  
-  mutate(IOU1m = cumsumD24h/sqrt(area))  |>  
-  filter(!is.na(IOU1m)) |> 
-  rename(month = Month)
+  left_join(mcp.monthly[,c("id_month","area")],by = "id_month")  |>  
+  mutate(iou1m = cumsum.d24h/sqrt(area))  |>  
+  filter(!is.na(iou1m)) |> ungroup() |> 
+  dplyr::select(individual_id,month,year,year_month,mean.x,mean.y,cumsum.d24h,area,iou1m)  
 ```
 
 ## Diurnality Index
@@ -472,9 +408,9 @@ day and night, respectively. The diurnality index varies between -1
 
 library(suncalc)
 
-diurn.ind <- df.traj1h |> 
-  mutate(lat=y,lon=x,date=as.Date(TimestampUTC)) |> 
-  dplyr::select(lat,lon,date,ID,TimestampUTC,YMD,D1h) 
+diurn.ind <- animlocs.1hourly_sl |> 
+  mutate(lat=y_,lon=x_,date=as.Date(t_)) |> 
+  dplyr::select(lat,lon,date,individual_id,t_,ymd,d1h) 
 
 sun_all <- getSunlightTimes(data = diurn.ind, 
                             tz = "UTC",
@@ -484,20 +420,20 @@ diurn.ind$sunrise <- sun_all$sunrise
 diurn.ind$sunset<- sun_all$sunset
 
 diurn.ind$daytime <- 
-  ifelse(diurn.ind$TimestampUTC < diurn.ind$sunrise |
-         diurn.ind$TimestampUTC > diurn.ind$sunset, "night","day")
+  ifelse(diurn.ind$t_ < diurn.ind$sunrise |
+         diurn.ind$t_ > diurn.ind$sunset, "night","day")
 
       mean.coord <- diurn.ind |> 
-        mutate(id.day = paste(ID,YMD,sep=".")) |> group_by(id.day) |> 
+        mutate(id.day = paste(individual_id,ymd,sep=".")) |> group_by(id.day) |> 
         mutate(mean.x = mean(lon, na.rm=T),
                mean.y = mean(lat, na.rm=T)) |> 
         dplyr::select(id.day, mean.x, mean.y) |> distinct()
 
 DI <- diurn.ind %>%
   data.frame %>% 
-      group_by(ID, YMD)%>%
-      summarise(dist.sum.day = sum(D1h[daytime=="day"]),
-                dist.sum.night = sum(D1h[daytime=="night"]),
+      group_by(individual_id, ymd)%>%
+      summarise(dist.sum.day = sum(d1h[daytime=="day"]),
+                dist.sum.night = sum(d1h[daytime=="night"]),
                 dist.length.day = sum(daytime=="day"),
                 dist.length.night = sum(daytime=="night"),
                 total.daylength = dist.length.day + dist.length.night)
@@ -518,12 +454,12 @@ c = movement activity during the night = dist.length.night
 d = length of the night                = dist.length.night
 
 ```{r}
-DI$Diurn <- Diurnality(DI$dist.sum.day, DI$dist.length.day, DI$dist.sum.night, DI$dist.length.night)
+DI$diurnality <- Diurnality(DI$dist.sum.day, DI$dist.length.day, DI$dist.sum.night, DI$dist.length.night)
 
 DI <- DI |> 
-  mutate(id.day = paste(ID,YMD,sep=".")) |> 
+  mutate(id.day = paste(individual_id,ymd,sep=".")) |> 
   left_join(mean.coord,by = "id.day") |> 
-  filter(total.daylength > 19)  
+  filter(total.daylength > 19) 
 ```
 
 # Summarize movement metrics per individual
@@ -533,29 +469,31 @@ Use a custom function over each movement metric dataframe to extract individual 
 ```{r function to summarize 1h Displacements}
 FDispl1h<-function(x){
   
-  ID<-with(x, tapply(as.character(x$ID),ID, unique))
+  individual_id<-with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
   # Get sample size per individual
-  n1h<-as.numeric(with(x, tapply(x$TimestampUTC,ID, length)))
+  n1h<-as.numeric(with(x, tapply(x$t_,individual_id, length)))
   
    # 1hr Displacement
-  D1h.mean<-as.numeric(with(x, tapply(x$D1h+0.001,ID, mean)))
-  D1h.median<-as.numeric(with(x, tapply(x$D1h+0.001,ID, median)))
-  D1h.cv<-as.numeric(with(x, tapply(x$D1h+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  D1h.95<-as.numeric(with(x, tapply(x$D1h+0.001,ID, quantile,.95)))
-  D1h.05<-as.numeric(with(x, tapply(x$D1h+0.001,ID, quantile,.05)))
+  d1h.mean <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, mean, na.rm=T)))
+  d1h.median <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, median, na.rm=T)))
+  d1h.cv <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  d1h.95 <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, quantile,.95, na.rm=T)))
+  d1h.05 <- as.numeric(with(x, tapply(x$d1h+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,
-                   n1h,
-                   D1h.mean,D1h.median,D1h.cv,D1h.95,D1h.05)
+  dats<-data.frame(individual_id,n1h,
+                   d1h.mean,d1h.median,d1h.cv,d1h.95,d1h.05)
   
   return(dats)
 }
 ```
 
 ```{r summarize 1h displ}
-Displ1h <- FDispl1h(df.traj1h[,c("ID","TimestampUTC","D1h")])
+animlocs.1hourly_sl <- data.frame(animlocs.1hourly_sl)
+animlocs.1hourly_sl$individual_id <- factor(animlocs.1hourly_sl$individual_id)
+
+Displ1h <- FDispl1h(animlocs.1hourly_sl[,c("individual_id","t_","d1h")])
 rownames(Displ1h) <- NULL
 head(Displ1h)
 ```
@@ -563,217 +501,240 @@ head(Displ1h)
 Function to summarize Max24h Displacements
 ```{r function to summarize Max24h Displacements, class.source = 'fold-hide'}
 FMaxDispl24h<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+ individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # Get sample size per individual
-  n.max24h.days<-as.numeric(with(x, tapply(x$YMD,ID, length)))
+  # Get sample size per indivindividual_idual
+  n.dmax24h.days<-as.numeric(with(x, tapply(x$ymd,individual_id, length)))
   
   # 24hr Displacement
-  Dmax24h.mean<-as.numeric(with(x, tapply(x$Dmax24+0.001,ID, mean)))
-  Dmax24h.median<-as.numeric(with(x, tapply(x$Dmax24+0.001,ID, median)))
-  Dmax24h.cv<-as.numeric(with(x, tapply(x$Dmax24+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  Dmax24h.95<-as.numeric(with(x, tapply(x$Dmax24+0.001,ID, quantile,.95)))
-  Dmax24h.05<-as.numeric(with(x, tapply(x$Dmax24+0.001,ID, quantile,.05)))
+  dmax24h.mean<-as.numeric(with(x, tapply(x$dmax24h+0.001,individual_id, mean, na.rm=T)))
+  dmax24h.median<-as.numeric(with(x, tapply(x$dmax24h+0.001,individual_id, median, na.rm=T)))
+  dmax24h.cv<-as.numeric(with(x, tapply(x$dmax24h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  dmax24h.95<-as.numeric(with(x, tapply(x$dmax24h+0.001,individual_id, quantile,.95, na.rm=T)))
+  dmax24h.05<-as.numeric(with(x, tapply(x$dmax24h+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n.max24h.days,
-                   Dmax24h.mean,Dmax24h.median,Dmax24h.cv,Dmax24h.95,Dmax24h.05)
-  
+  dats<-data.frame(individual_id,n.dmax24h.days,
+                   dmax24h.mean,dmax24h.median,dmax24h.cv,dmax24h.95,dmax24h.05)
   return(dats)
 }
-MaxDispl24h <- FMaxDispl24h(Dmax24)
+
+MaxDispl24h <- FMaxDispl24h(dmax24)
+rownames(MaxDispl24h) <- NULL
 ```
 
 Function to summarize 24h Displacements
 ```{r function to summarize 24h Displacements, class.source = 'fold-hide'}
 FDispl24h<-function(x){
   
-  ID<-with(x, tapply(as.character(x$ID),ID, unique))
+  individual_id<-with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # Get sample size per individual
-  n24h.days<-as.numeric(with(x, tapply(x$TimestampUTC,ID, length)))
+  # Get sample size per indivindividual_idual
+  n24h.days<-as.numeric(with(x, tapply(as.character(x$t_),individual_id, length)))
   
   # 24hr Displacement
-  D24h.mean<-as.numeric(with(x, tapply(x$D24h+0.001,ID, mean)))
-  D24h.median<-as.numeric(with(x, tapply(x$D24h+0.001,ID, median)))
-  D24h.cv<-as.numeric(with(x, tapply(x$D24h+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  D24h.95<-as.numeric(with(x, tapply(x$D24h+0.001,ID, quantile,.95)))
-  D24h.05<-as.numeric(with(x, tapply(x$D24h+0.001,ID, quantile,.05)))
+  d24h.mean <- as.numeric(with(x, tapply(x$d24h+0.001,individual_id, mean, na.rm=T)))
+  d24h.median <- as.numeric(with(x, tapply(x$d24h+0.001,individual_id, median, na.rm=T)))
+  d24h.cv <- as.numeric(with(x, tapply(x$d24h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  d24h.95 <- as.numeric(with(x, tapply(x$d24h+0.001,individual_id, quantile,.95, na.rm=T)))
+  d24h.05 <- as.numeric(with(x, tapply(x$d24h+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n24h.days,
-                   D24h.mean,D24h.median,D24h.cv,D24h.95,D24h.05)
-  
+  dats<-data.frame(individual_id,n24h.days,
+                   d24h.mean,d24h.median,d24h.cv,d24h.95,d24h.05)
+
   return(dats)
 }
-Displ24h <- FDispl24h(df.traj.24h[,c("ID","TimestampUTC","D24h")])
+
+animlocs.daily_sl <- data.frame(animlocs.daily_sl)
+animlocs.daily_sl$individual_id <- factor(animlocs.daily_sl$individual_id)
+
+Displ24h <- FDispl24h(animlocs.daily_sl[,c("individual_id","t_","d24h")])
+rownames(Displ24h) <- NULL
 ```
 
 Function to summarize Max7d Displacements
 ```{r function to summarize Max7d Displacements, class.source = 'fold-hide'}
 FMaxDispl7d<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+  individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # Get sample size per individual
-  n.max7d.weeks<-as.numeric(with(x, tapply(x$year_week,ID, length)))
+  # Get sample size per indivindividual_idual
+  n.dmax7d.weeks<-as.numeric(with(x, tapply(x$year_week,individual_id, length)))
   
   # 24hr Displacement
-  Dmax7d.mean<-as.numeric(with(x, tapply(x$Dmax7d+0.001,ID, mean)))
-  Dmax7d.median<-as.numeric(with(x, tapply(x$Dmax7d+0.001,ID, median)))
-  Dmax7d.cv<-as.numeric(with(x, tapply(x$Dmax7d+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  Dmax7d.95<-as.numeric(with(x, tapply(x$Dmax7d+0.001,ID, quantile,.95)))
-  Dmax7d.05<-as.numeric(with(x, tapply(x$Dmax7d+0.001,ID, quantile,.05)))
+  dmax7d.mean<-as.numeric(with(x, tapply(x$dmax7d+0.001,individual_id, mean, na.rm=T)))
+  dmax7d.median<-as.numeric(with(x, tapply(x$dmax7d+0.001,individual_id, median, na.rm=T)))
+  dmax7d.cv<-as.numeric(with(x, tapply(x$dmax7d+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  dmax7d.95<-as.numeric(with(x, tapply(x$dmax7d+0.001,individual_id, quantile,.95, na.rm=T)))
+  dmax7d.05<-as.numeric(with(x, tapply(x$dmax7d+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n.max7d.weeks,
-                   Dmax7d.mean,Dmax7d.median,Dmax7d.cv,Dmax7d.95,Dmax7d.05)
-  
+  dats<-data.frame(individual_id,n.dmax7d.weeks,
+                   dmax7d.mean,dmax7d.median,dmax7d.cv,dmax7d.95,dmax7d.05)
+
   return(dats)
 }
-MaxDispl7d <- FMaxDispl7d(Dmax7d)
+
+MaxDispl7d <- FMaxDispl7d(dmax7d)
+rownames(MaxDispl7d) <- NULL
 ```
 
 Function to summarize 1d MCP
 ```{r function to summarize 1d MCP, class.source = 'fold-hide'}
 FSumMCP1d<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+   individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # Get sample size per individual
-  n.MCP24h.days<-as.numeric(with(x, tapply(x$ID,ID, length)))
+  # Get sample size per indivindividual_idual
+  n.mcp24h.days<-as.numeric(with(x, tapply(x$individual_id,individual_id, length)))
   
   # 24MCP Displacement
-  MCP24h.mean<-as.numeric(with(x, tapply(x$area+0.001,ID, mean)))
-  MCP24h.median<-as.numeric(with(x, tapply(x$area+0.001,ID, median)))
-  MCP24h.cv<-as.numeric(with(x, tapply(x$area+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  MCP24h.95<-as.numeric(with(x, tapply(x$area+0.001,ID, quantile,.95)))
-  MCP24h.05<-as.numeric(with(x, tapply(x$area+0.001,ID, quantile,.05)))
+  mcp24h.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
+  mcp24h.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
+  mcp24h.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  mcp24h.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
+  mcp24h.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n.MCP24h.days,
-                   MCP24h.mean,MCP24h.median,MCP24h.cv,MCP24h.95,MCP24h.05)
+  dats<-data.frame(individual_id,n.mcp24h.days,
+                   mcp24h.mean,mcp24h.median,mcp24h.cv,mcp24h.95,mcp24h.05)
   
   return(dats)
 }
+
 MCP24h <- FSumMCP1d(mcp.daily)
+rownames(MCP24h) <- NULL
 ```
 
 Function to summarize 7d MCP
 ```{r function to summarize 7d MCP, class.source = 'fold-hide'}
 FSumMCP7d<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+  individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # Get sample size per individual
-  n.MCP7d.weeks<-as.numeric(with(x, tapply(x$year_week,ID, length)))
+  # Get sample size per indivindividual_idual
+  n.mcp7d.weeks<-as.numeric(with(x, tapply(x$year_week,individual_id, length)))
   
-  # 24MCP Displacement
-  MCP7d.mean<-as.numeric(with(x, tapply(x$area+0.001,ID, mean)))
-  MCP7d.median<-as.numeric(with(x, tapply(x$area+0.001,ID, median)))
-  MCP7d.cv<-as.numeric(with(x, tapply(x$area+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  MCP7d.95<-as.numeric(with(x, tapply(x$area+0.001,ID, quantile,.95)))
-  MCP7d.05<-as.numeric(with(x, tapply(x$area+0.001,ID, quantile,.05)))
+  # 24mcp Displacement
+  mcp7d.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
+  mcp7d.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
+  mcp7d.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  mcp7d.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
+  mcp7d.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n.MCP7d.weeks,
-                   MCP7d.mean,MCP7d.median,MCP7d.cv,MCP7d.95,MCP7d.05)
-  
+  dats<-data.frame(individual_id,n.mcp7d.weeks,
+                   mcp7d.mean,mcp7d.median,mcp7d.cv,mcp7d.95,mcp7d.05)
+ 
   return(dats)
 }
 MCP7d <- FSumMCP7d(mcp.weekly)
+rownames(MCP7d) <- NULL
 ```
 
 Function to summarize 1m MCP
 ```{r function to summarize 1m MCP, class.source = 'fold-hide'}
 FSumMCP1m<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+  individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
 
-  n.MCP1m.months<-as.numeric(with(x, tapply(x$year_month,ID, length)))
+  n.mcp1m.months<-as.numeric(with(x, tapply(x$year_month,individual_id, length)))
   
-  MCP1m.mean<-as.numeric(with(x, tapply(x$area+0.001,ID, mean)))
-  MCP1m.median<-as.numeric(with(x, tapply(x$area+0.001,ID, median)))
-  MCP1m.cv<-as.numeric(with(x, tapply(x$area+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  MCP1m.95<-as.numeric(with(x, tapply(x$area+0.001,ID, quantile,.95)))
-  MCP1m.05<-as.numeric(with(x, tapply(x$area+0.001,ID, quantile,.05)))
+  mcp1m.mean<-as.numeric(with(x, tapply(x$area+0.001,individual_id, mean, na.rm=T)))
+  mcp1m.median<-as.numeric(with(x, tapply(x$area+0.001,individual_id, median, na.rm=T)))
+  mcp1m.cv<-as.numeric(with(x, tapply(x$area+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  mcp1m.95<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.95, na.rm=T)))
+  mcp1m.05<-as.numeric(with(x, tapply(x$area+0.001,individual_id, quantile,.05, na.rm=T)))
   
-  dats<-data.frame(ID,n.MCP1m.months,
-                   MCP1m.mean,MCP1m.median,MCP1m.cv,MCP1m.95,MCP1m.05)
+  dats<-data.frame(individual_id,n.mcp1m.months,
+                   mcp1m.mean,mcp1m.median,mcp1m.cv,mcp1m.95,mcp1m.05)
   
   return(dats)
 }
 MCP1m <- FSumMCP1m(mcp.monthly)
+rownames(MCP1m) <- NULL
 ```
 
 Function to summarize IoU24h
 ```{r function to summarize IoU24h, class.source = 'fold-hide'}
 FSumIOU24h<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+ individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # Get sample size per individual
-  n.IOU24h.days<-as.numeric(with(x, tapply(x$YMD,ID, length)))
+  # Get sample size per indivindividual_idual
+  n.iou24h.days<-as.numeric(with(x, tapply(x$ymd,individual_id, length)))
   
   # 24hr Displacement
-  IOU24h.mean<-as.numeric(with(x, tapply(x$IOU24h+0.001,ID, mean)))
-  IOU24h.median<-as.numeric(with(x, tapply(x$IOU24h+0.001,ID, median)))
-  IOU24h.cv<-as.numeric(with(x, tapply(x$IOU24h+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  IOU24h.95<-as.numeric(with(x, tapply(x$IOU24h+0.001,ID, quantile,.95)))
-  IOU24h.05<-as.numeric(with(x, tapply(x$IOU24h+0.001,ID, quantile,.05)))
+  iou24h.mean<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, mean, na.rm=T)))
+  iou24h.median<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, median, na.rm=T)))
+  iou24h.cv<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  iou24h.95<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, quantile,.95, na.rm=T)))
+  iou24h.05<-as.numeric(with(x, tapply(x$iou24h+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n.IOU24h.days,
-                   IOU24h.mean,IOU24h.median,IOU24h.cv,IOU24h.95,IOU24h.05)
+  dats<-data.frame(individual_id,n.iou24h.days,
+                   iou24h.mean,iou24h.median,iou24h.cv,iou24h.95,iou24h.05)
   
   return(dats)
 }
+
+df.IoU24h <- data.frame(df.IoU24h)
+df.IoU24h$individual_id <- factor(df.IoU24h$individual_id)
+
 IOU24h <- FSumIOU24h(df.IoU24h)
+rownames(IOU24h) <- NULL
 ```
 
 Function to summarize IoU1m
 ```{r function to summarize IoU1m, class.source = 'fold-hide'}
 FSumIOU1m<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+  individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # Get sample size per individual
-  n.IOU1m.month<-as.numeric(with(x, tapply(x$month,ID, length)))
+  # Get sample size per indivindividual_idual
+  n.iou1m.month<-as.numeric(with(x, tapply(x$year_month,individual_id, length)))
   
   # 24hr Displacement
-  IOU1m.mean<-as.numeric(with(x, tapply(x$IOU1m+0.001,ID, mean)))
-  IOU1m.median<-as.numeric(with(x, tapply(x$IOU1m+0.001,ID, median)))
-  IOU1m.cv<-as.numeric(with(x, tapply(x$IOU1m+0.001,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  IOU1m.95<-as.numeric(with(x, tapply(x$IOU1m+0.001,ID, quantile,.95)))
-  IOU1m.05<-as.numeric(with(x, tapply(x$IOU1m+0.001,ID, quantile,.05)))
+  iou1m.mean<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, mean, na.rm=T)))
+  iou1m.median<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, median, na.rm=T)))
+  iou1m.cv<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  iou1m.95<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, quantile,.95, na.rm=T)))
+  iou1m.05<-as.numeric(with(x, tapply(x$iou1m+0.001,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n.IOU1m.month,
-                   IOU1m.mean,IOU1m.median,IOU1m.cv,IOU1m.95,IOU1m.05)
+  dats<-data.frame(individual_id,n.iou1m.month,
+                   iou1m.mean,iou1m.median,iou1m.cv,iou1m.95,iou1m.05)
   
   return(dats)
 }
+
+df.IoU1m <- data.frame(df.IoU1m)
+df.IoU1m$individual_id <- factor(df.IoU1m$individual_id)
+
 IOU1m <- FSumIOU1m(df.IoU1m)
+rownames(IOU1m) <- NULL
 ```
 
 Function to summarize Diurnality Index
 ```{r function to summarize IoU1m, class.source = 'fold-hide'}
 FSumDI<-function(x){
-  ID <- with(x, tapply(as.character(x$ID),ID, unique))
+ individual_id <- with(x, tapply(as.character(x$individual_id),individual_id, unique))
   
-  # How many days per individual
-  n.DI.days<-as.numeric(with(x, tapply(x$YMD,ID, length)))
+  # How many days per indivindividual_idual
+  n.di.days<-as.numeric(with(x, tapply(x$ymd,individual_id, length)))
   
   # Diurnality
-  DI.mean<-as.numeric(with(x, tapply(x$Diurn,ID, mean)))
-  DI.median<-as.numeric(with(x, tapply(x$Diurn,ID, median)))
-  DI.cv<-as.numeric(with(x, tapply(x$Diurn,ID, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
-  DI.95<-as.numeric(with(x, tapply(x$Diurn,ID, quantile,.95)))
-  DI.05<-as.numeric(with(x, tapply(x$Diurn,ID, quantile,.05)))
+  di.mean<-as.numeric(with(x, tapply(x$diurnality,individual_id, mean, na.rm=T)))
+  di.median<-as.numeric(with(x, tapply(x$diurnality,individual_id, median, na.rm=T)))
+  di.cv<-as.numeric(with(x, tapply(x$diurnality,individual_id, function(x) sd(x, na.rm=T) / mean(x, na.rm=T))))
+  di.95<-as.numeric(with(x, tapply(x$diurnality,individual_id, quantile,.95, na.rm=T)))
+  di.05<-as.numeric(with(x, tapply(x$diurnality,individual_id, quantile,.05, na.rm=T)))
   
   # build dataframe
-  dats<-data.frame(ID,n.DI.days,
-                   DI.mean,DI.median,DI.cv,DI.95,DI.05)
-  
+  dats<-data.frame(individual_id,n.di.days,
+                   di.mean,di.median,di.cv,di.95,di.05)
   return(dats)
 }
 
-DI <- DI[!is.na(DI$Diurn),]
+DI <- DI[!is.na(DI$diurnality),]
+DI$individual_id <- factor(DI$individual_id)
 DI.12m <- FSumDI(DI)
+rownames(DI.12m) <- NULL
 ```
 
 # Build database with summary values
@@ -784,18 +745,18 @@ MoveTrait.v0 <- full_join(Displ1h, full_join(Displ24h, full_join(MaxDispl24h,
              full_join(MCP1m, full_join(IOU24h, full_join(IOU1m, DI.12m)))))))))
 
 movedata2 <- movedata %>% 
-  group_by(ID) %>% 
+  group_by(individual_id) %>% 
   mutate(mean.longitude = mean(Longitude,na.rm=T),
          mean.latitude = mean(Latitude,na.rm=T)) %>% 
-  dplyr::select(ID,Species,BodyMass_kg,ContactPerson,mean.longitude,mean.latitude) %>% 
-  distinct()
+  dplyr::select(individual_id,species,animal_mass,contact_person_name,mean.longitude,mean.latitude) %>% 
+  dplyr::filter(!duplicated(individual_id))
 
-DBMoveTrait.v0 <- merge(movedata2, MoveTrait.v0, by = "ID", all.y=T)
+DBMoveTrait.v0 <- merge(movedata2, MoveTrait.v0, by = "individual_id", all.y=T)
 DBMoveTrait.v0 <- DBMoveTrait.v0 %>% droplevels()
 ```
 
 ```{r}
-saveRDS(DBMoveTrait.v0,"./DATA/Tucker//MoveTraitsDB.v0.1_Tucker.rds")
+saveRDS(DBMoveTrait.v0,"./DATA/Tucker/MoveTraitsDB.v0.1_Tucker.rds")
 ```
 
 
@@ -805,73 +766,82 @@ saveRDS(DBMoveTrait.v0,"./DATA/Tucker//MoveTraitsDB.v0.1_Tucker.rds")
 # Create the full data set with hourly and daily relocation intervals
 MoveTrait.v0_spatial <- 
   DBMoveTrait.v0  |> 
-  tidyr::nest(data = -ID)|> 
+  tidyr::nest(data = -individual_id)|> 
   dplyr::select(-data) |>  # just a quick trick to keep things flowing.
-  left_join(DBMoveTrait.v0[!duplicated(DBMoveTrait.v0$ID),1:66], 
-            by = c("ID" = "ID"))  |>  
+  left_join(DBMoveTrait.v0[!duplicated(DBMoveTrait.v0$individual_id),1:66], 
+            by = c("individual_id" = "individual_id"))  |>  
   # 1 hourly
-  left_join(df.traj1h %>%
+  left_join(animlocs.1hourly_sl %>%
               data.frame %>% 
-              dplyr::select("ID","TimestampUTC","D1h","x","y") %>% 
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+              dplyr::select("individual_id","t_","d1h","x_","y_") %>% 
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(Displ.1h = data) |>  
+  
   # 24 hourly
-  left_join(df.traj.24h %>%
-              dplyr::select("ID","TimestampUTC","D24h","x","y") %>% 
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+  left_join(animlocs.daily_sl %>%
+              dplyr::select("individual_id","t_","d24h","x_","y_") %>% 
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(Displ.24h = data) |>  
+  
   # Dmax24
-  left_join(Dmax24 %>%
-              dplyr::select("ID","YMD","Dmax24","mean.x", "mean.y") %>% 
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+  left_join(dmax24 %>%
+              dplyr::select("individual_id","ymd","dmax24h","mean.x", "mean.y") %>% 
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(MaxDispl.24h = data)  |>  
+  
   # Dmax7d
-  left_join(Dmax7d %>%
-              dplyr::select("ID","week","year_week","Dmax7d","mean.x", "mean.y") %>% #,"week","year_week",s"mean.x", "mean.y"
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+  left_join(dmax7d %>%
+              dplyr::select("individual_id","week","year_week","dmax7d","mean.x", "mean.y") %>% #,"week","year_week",s"mean.x", "mean.y"
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(MaxDispl.7d = data)  |>  
+  
   # mcp.daily
   left_join(mcp.daily %>%
-              dplyr::select("ID","YMD","area","mean.x", "mean.y") %>% 
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+              dplyr::select("individual_id","ymd","area","mean.x", "mean.y") %>% 
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(Mcp.24h = data) |>  
+  
   # mcp.weekly
   left_join(mcp.weekly %>%
-              dplyr::select("ID","week","year_week","area","mean.x", "mean.y") %>% #,"week","year_week",mean.x", "mean.y"
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+              dplyr::select("individual_id","week","year_week","area","mean.x", "mean.y") %>% #,"week","year_week",mean.x", "mean.y"
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(Mcp.7d = data)  |>  
+  
   # mcp.monthly
   left_join(mcp.monthly %>%
-              dplyr::select("ID","month","year_month","area","mean.x", "mean.y") %>%  #,"month","year_month"
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+              dplyr::select("individual_id","month","year_month","area","mean.x", "mean.y") %>%  #,"month","year_month"
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(Mcp.1m = data) |> 
+  
   # Intensity of Use 24h
   left_join(df.IoU24h %>%
               ungroup() |>
-              dplyr::select("ID","YMD","IOU24h","mean.x", "mean.y") %>% 
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+              dplyr::select("individual_id","ymd","iou24h","mean.x", "mean.y") %>% 
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(IoU.24h = data)  |>  
-  # Intensity of Use 24h
+  
+  # Intensity of Use 1m
   left_join(df.IoU1m %>%
               ungroup() |>
-              dplyr::select("ID","month","year_month","IOU1m","mean.x","mean.y") %>% ## month, year_month
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
+              dplyr::select("individual_id","month","year","iou1m","mean.x", "mean.y") %>% ## month, year_month
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
   dplyr::rename(IoU.1m = data)  |>  
+  
 # Diurnality Index
   left_join(DI %>%
-              dplyr::select("ID","YMD","Diurn","mean.x","mean.y") %>% 
-              tidyr::nest(data = -ID), 
-            by = c("ID" = "ID")) %>% 
-  dplyr::rename(Diurnality = data) 
+              dplyr::select("individual_id","ymd","diurnality","mean.x","mean.y") %>% 
+              tidyr::nest(data = -individual_id), 
+            by = c("individual_id" = "individual_id")) %>% 
+  dplyr::rename(diurnality = data) 
 
 ```
 
