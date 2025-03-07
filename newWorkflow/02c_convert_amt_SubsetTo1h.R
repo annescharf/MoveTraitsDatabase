@@ -29,7 +29,8 @@ flsMV <- list.files(pthClean, full.names = F)
 done <- list.files(pthamt1h, full.names = F)
 flsMV2 <- flsMV[!flsMV%in%done]
 
-#flsMV2 <- as.character(referenceTableStudiesUsed$fileName)
+# flsMV3 <- as.character(referenceTableStudiesUsed$fileName)
+# flsMV2 <- flsMV2[!flsMV2%in%flsMV3]
 
 ####### convert tracks to amt and thin to 1h ###########
 
