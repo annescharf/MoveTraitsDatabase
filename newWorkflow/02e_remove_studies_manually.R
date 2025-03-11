@@ -20,4 +20,11 @@ metadata[metadata$fileName %in%  c("1120749252_3069649656.rds",
                                    "1120749252_3069649685.rds",
                                    "2950149_2950167.rds") ,"excluded"] <- "yes" # exclude coaties
 
+metadata[metadata$fileName %in%  c("17469219_1515864240.rds","17469219_171242772.rds","17469219_171242945.rds", 
+                                   "17469219_171243042.rds","17469219_173320297.rds","17469219_176963464.rds", 
+                                   "17469219_18418658.rds","17469219_18427263.rds","17469219_18427289.rds",  
+                                   "17469219_18427333.rds","17469219_2110127141.rds","17469219_497810078.rds", 
+                                   "17469219_506756344.rds","17469219_564630857.rds","17469219_75153875.rds",  
+                                   "17469219_876313552.rds") , "excluded"] <- "yes" # exclude great blue heron
+
 saveRDS(metadata, paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn_excludedStudies.rds"))
