@@ -34,14 +34,14 @@ First exploration of the MoveTraits database compiled from open access data from
 ```{r}
 pathTOfolder <- "./DATA/MoveTraitsData/7.MoveTraits_db/"
 
-MoveTrait.v0.1 <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_individual.sum_20250305.rds"))
+MoveTrait.v0.1 <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_individual.sum_20250311.rds"))
 
 MoveTrait.v0.1$study_id <- as.integer64(MoveTrait.v0.1$study_id)
 ```
 
 ## Quick summary
-We collected movement traits from a total of 119 bird and 61 mammal species represented by 7289 individuals (3856 birds, 3433 mammals). 
-Data of 5518 individuals were collected from Movebank and 1788 from Tucker et al.
+We collected movement traits from a total of 107 bird and 56 mammal species represented by 6337 individuals (3646 birds, 2691 mammals). 
+Data of 4560 individuals were collected from Movebank and 1777 from Tucker et al.
 
 ```{r,echo=F}
 MoveTrait.v0.1 |>  tally()
@@ -85,7 +85,7 @@ pant <- read.table("./DATA/species_traits/PanTHERIA_1-0_WR05_Aug2008.txt",
 ## Fig1A - log body mass versus log monthly MCP
 
 ```{r}
-MoveTrait.v0.1.sp <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_species.sum_20250305.rds"))
+MoveTrait.v0.1.sp <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_species.sum_20250311.rds"))
 ```
 
 ```{r}
@@ -99,13 +99,14 @@ MoveTrait.v0.1.sp <- MoveTrait.v0.1.sp |>
 MoveTrait.v0.1.sp[MoveTrait.v0.1.sp$common_name %in% "Artic fox", "common_name"]<-"Arctic fox"
 ```
 
+
 ```{r, fig.showtext = TRUE}
 cols <- c("1" = "#228833", "2" = "#4477AA", "3" = "#AA3377")
 
- tot <- c("White-tailed deer","Pronghorn","African elephant","Mongolian gazelle","Lion","Roe deer","Cheetah", "Coyote", "South american tapir","African forest elephant","Arctic fox","Reindeer/caribou","Nyala","Raccoon","Plains zebra")
+ tot <- c("White-tailed deer","Pronghorn","African elephant","Mongolian gazelle","Lion","Roe deer","Cheetah", "Coyote", "South american tapir","African forest elephant","Reindeer/caribou","Nyala","Raccoon","Plains zebra","Arctic fox","Collared peccary")
  
- below <- c("White-tailed deer","Pronghorn","Red deer","Arctic fox","Nyala","Raccoon","Plains zebra")
- left <- c("African elephant","Mongolian gazelle","Lion","Roe deer","Cheetah", "South american tapir","African forest elephant", "Coyote","Reindeer/caribou")
+ below <- c("White-tailed deer","Pronghorn","Red deer","Nyala","Raccoon","Plains zebra","Collared peccary")
+ left <- c("African elephant","Mongolian gazelle","Lion","Roe deer","Cheetah", "South american tapir","African forest elephant", "Coyote","Reindeer/caribou","Arctic fox")
 
 dat.FigA <-
   MoveTrait.v0.1.sp |> 
@@ -115,19 +116,27 @@ dat.FigA <-
   dplyr::mutate(label_above = ifelse(common_name %in% tot, "", common_name),
                   label_below = ifelse(common_name %in% below, common_name, ""),
                   label_left = ifelse(common_name %in% left, common_name, "")) |>
-  #dplyr::mutate(label_above = common_name) |>
   left_join(pant[,c("MSW05_Binomial","X6.2_TrophicLevel","X5.1_AdultBodyMass_g")], 
             by = c("species" = "MSW05_Binomial")) |> 
-    mutate(
-    X6.2_TrophicLevel = factor(X6.2_TrophicLevel)) |>
-    mutate(
-    X6.2_TrophicLevel = factor(X6.2_TrophicLevel),
-    X6.2_TrophicLevel = fct_recode(X6.2_TrophicLevel, 
-                                        "2" = "-999"),
-    X6.2_TrophicLevel = fct_relevel(X6.2_TrophicLevel, "1","2")) |>
+  mutate(X6.2_TrophicLevel = as.character(X6.2_TrophicLevel)) |>
   mutate(AdultBodyMass_kg = X5.1_AdultBodyMass_g/1000) |> 
-  filter(!is.na(AdultBodyMass_kg)) |> droplevels() |> 
   mutate(mcp1m.mean = mcp1m.mean* 0.000001)
+
+# rename trophic level for missing species
+  dat.FigA[dat.FigA$X6.2_TrophicLevel %in% "-999","species"]
+  dat.FigA[dat.FigA$species %in% c("Equus quagga",
+                                   "Lepus europaeus",
+                                   "Capreolus capreolus"),"X6.2_TrophicLevel"] <- "1"
+  dat.FigA[dat.FigA$species %in% c("Papio anubis"),"X6.2_TrophicLevel"] <- "2"
+
+  dat.FigA[is.na(dat.FigA$X6.2_TrophicLevel),"species"]
+  dat.FigA[dat.FigA$species %in% c("Pekania pennanti"),"X6.2_TrophicLevel"] <- "3"
+  dat.FigA[dat.FigA$species %in% c("Tragelaphus sylvaticus"),"X6.2_TrophicLevel"] <- "1"
+  
+  dat.FigA[is.na(dat.FigA$AdultBodyMass_kg),"species"]
+  dat.FigA[dat.FigA$species %in% c("Pekania pennanti"),"AdultBodyMass_kg"] <- 3.8
+  dat.FigA[dat.FigA$species %in% c("Tragelaphus sylvaticus"),"AdultBodyMass_kg"] <- 50
+
 
   m1b <- lm(log(mcp1m.mean) ~ log(AdultBodyMass_kg),dat.FigA)
   summary(m1b)
@@ -155,7 +164,7 @@ FigA <-
   scale_y_continuous(breaks = c(log(0.1),log(1),log(10),log(100), log (1000)),
                      labels = c(0.1, 1,10,100, 1000)) +
   geom_text(x = 7.8, y = 2, size = 3.5,
-            label = expression(R^2 ~ "= 0.19")) +
+            label = expression(R^2 ~ "= 0.20")) +
   scale_color_manual(values=cols, name="",labels = c("Herbivore", "Omnivore","Carnivore"),na.translate = F) +
   theme_bw(base_size = 11, base_family = "Avenir") +
   theme(legend.position = c(0.8,0.22), #c(0.8, 0.2)
@@ -178,9 +187,11 @@ FigA <-
         )
 ```
 
+Based on 43 species
+
 # Figure 2 - inter-individual variability
 
-Only including species with at least 10 individuals!! 
+Only including species with at least 10 individuals!! 27 species
 
 ## 24hr displacement distance
 ```{r,echo=F,warning=FALSE,message=FALSE,fig.showtext = TRUE}
@@ -250,14 +261,16 @@ This needs to be developed a lot more!!!! Any ideas welcome - I was thinking alo
 Would be cool to include a temperature gradient.
 
 ```{r}
-MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250305.rds"))
+MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250311.rds"))
 ```
 
 ```{r,echo=F}
 d24h.raw <- MoveTrait.v0.1_spatial |> 
   unnest(displ.24h) |> 
-  dplyr::select("individual_id","species","common_name","class","movement.mode",
-                "D24h","x","y","contact_person_name","source")
+  dplyr::select("individual_id","species","common_name",
+                "d24h","t_","x_","y_","contact_person_name","source") |> 
+  rename(x = x_)|> 
+  rename(y = y_)
 ```
 
 Mule deer 24hr displacement against HFI
@@ -271,7 +284,7 @@ Extract human footprint downloaded from https://doi.org/10.7927/H46T0JQ4
 ```{r}
 library(terra)
 hfi<-rast("/Users/ahertel/Documents/Work/GIS/HumanFootprintIndex/V3/wildareas-v3-2009-human-footprint.tif")
-d24h.mule.sf <- sf::st_as_sf(mule, coords = c(7:8))
+d24h.mule.sf <- sf::st_as_sf(mule, coords = c(6:7))
 sf::st_crs(d24h.mule.sf) <- 4326
 vect_d24h <- vect(d24h.mule.sf)
 reprojected_vect_d24h <- project(vect_d24h, crs(hfi))
@@ -307,11 +320,12 @@ model.results <- data.frame(
 
 # Loop through each pairwise comparison
 for (pair in pairwise_comparisons) {
+  
   # Subset data for the current pair of factor levels
   subset_data <- mule.high.hfi %>% filter(individual_id %in% pair)
   
   # Fit the linear model
-  model <- lm(D24h ~ hfi * individual_id, data = subset_data)
+  model <- lm(d24h ~ hfi * individual_id, data = subset_data)
   
   # Extract the p-value for the factor variable
   p_value_int <- round(summary(model)$coefficients[3, 4],3)
@@ -333,7 +347,7 @@ p.sign <- model.results |>
   filter(P_ID < 0.05 & P_int < 0.05)
 ```
 
-For 267 out of 1653 pairwise comparisons, the two individuals in question move significantly different along the HFI gradient. 
+For 258 out of 1653 pairwise comparisons, the two individuals in question move significantly different along the HFI gradient. 
 
 ```{r, eval = F}
 significant_comparisons <- p.sign$Comparison
@@ -359,7 +373,7 @@ for (pair in filtered_pairwise_comparisons) {
 
 # Plot significant comparisons (exemplary last 20 sign comparisons)
 ggplot(comparison_data[comparison_data$Comparison %in% levels(factor(comparison_data$Comparison))[248:270],],
-       aes(x = hfi, y = D24h, group = individual_id,color = individual_id)) + 
+       aes(x = hfi, y = d24h, group = individual_id,color = individual_id)) + 
   geom_point()+
   geom_smooth(method = "lm")+
   facet_wrap(~Comparison)+
@@ -386,8 +400,8 @@ mapview(map.mule,
 
 
 ```{r}
-model1 <- lm(D24h ~ hfi * individual_id, data = mule.high.hfi)
-model2 <- lm(D24h ~ hfi + individual_id, data = mule.high.hfi)
+model1 <- lm(d24h ~ hfi * individual_id, data = mule.high.hfi)
+model2 <- lm(d24h ~ hfi + individual_id, data = mule.high.hfi)
 
 anova(model2, model1, test = "LRT")
 
@@ -404,7 +418,7 @@ Plot Reaction norm Panel C
 FigC <-
 ggplot(data      = mule.high.hfi,
        aes(x     = hfi,
-           y     = D24h/1000,
+           y     = d24h/1000,
            col   = individual_id,
            group = individual_id))+ #to add the colours for different classes
   geom_point(size     = 1.2,
@@ -574,7 +588,7 @@ FigSB <-
 ## Monthly Intensity of use in migratory ungulates
 
 ```{r,echo=F}
-MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250305.rds"))
+MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250311.rds"))
 
 IoU.1m.raw <- MoveTrait.v0.1_spatial |>
   unnest(iou.1m)|> 
