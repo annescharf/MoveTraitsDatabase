@@ -78,6 +78,11 @@ colnames(metadata2)[7] <- "study_id"
 db.movebank.3 <- db.movebank.2 |>
   left_join(metadata2[,c("study_id","contact_person_name","license_type","citation")], by = "study_id") 
 
+## ----Rename species name-------------------------------------------------------------
+
+#  Martes pennanti == Pekania pennanti
+db.movebank.3[db.movebank.3$species %in% c("Pekania pennanti"),"species"] <-"Martes pennanti"
+
 ## ----Merge common name and exclude reptiles, fish etc.-------------------------------------------------------------
 
 commonname <- read.csv("/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/SpeciesList_commonname.csv")
@@ -98,7 +103,7 @@ db.movebank.4 <- db.movebank.4 |>
 
 #nrow(db.movebank.4) == nrow(db.movebank.3)  
 
-# 4560 individuals
+# 4574 individuals
 dim(db.movebank.4)
 # 243 studies
 length(unique(db.movebank.4$study_id))
@@ -166,12 +171,12 @@ MoveTrait.v0.1 <- MoveTrait.v0.1 |>
   mutate(species = fct_recode(species, "Loxodonta africana" = "Elephantidae"))|> 
   mutate(species = fct_recode(species, "Cervus elaphus" = "Cervus canadensis"))
 
-# 107 bird sp., 56 mammal sp.
+# 108 bird sp., 55 mammal sp.
 MoveTrait.v0.1 |> filter(!duplicated(species)) |> group_by(class) |>  tally()
-# 3646 bird ind., 2691 mammal ind. - 6337 ind total
+# 3660 bird ind., 2691 mammal ind. - 6351 ind total
 MoveTrait.v0.1 |> tally()
 MoveTrait.v0.1 |> group_by(class) |>  tally()
-#1777 tucker, 4560 movebank
+#1777 tucker, 4574 movebank
 MoveTrait.v0.1 |> group_by(source) |>  tally()
 
 dir.create(paste0(pathTOfolder,"7.MoveTraits_db"))
@@ -288,6 +293,11 @@ colnames(metadata2)[7] <- "study_id"
 
 db.movebank.3 <- db.movebank.2 |>
   left_join(metadata2[,c("study_id","contact_person_name","license_type","citation")], by = "study_id") 
+
+## ----Rename species name-------------------------------------------------------------
+
+#  Martes pennanti == Pekania pennanti
+db.movebank.3[db.movebank.3$species %in% c("Pekania pennanti"),"species"] <-"Martes pennanti"
 
 ## ----Merge common name and exclude reptiles, fish etc.-------------------------------------------------------------
 
