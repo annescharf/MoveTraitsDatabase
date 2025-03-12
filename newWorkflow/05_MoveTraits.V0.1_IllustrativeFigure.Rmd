@@ -95,8 +95,6 @@ MoveTrait.v0.1.sp <- MoveTrait.v0.1.sp |>
 MoveTrait.v0.1.sp <- MoveTrait.v0.1.sp |> 
   filter(movement.mode %nin% c("arboreal","swim")) |> 
   filter(!(class == "mammal" & movement.mode == "fly"))
-
-MoveTrait.v0.1.sp[MoveTrait.v0.1.sp$common_name %in% "Artic fox", "common_name"]<-"Arctic fox"
 ```
 
 
