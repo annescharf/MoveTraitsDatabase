@@ -34,14 +34,14 @@ First exploration of the MoveTraits database compiled from open access data from
 ```{r}
 pathTOfolder <- "./DATA/MoveTraitsData/7.MoveTraits_db/"
 
-MoveTrait.v0.1 <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_individual.sum_20250305.rds"))
+MoveTrait.v0.1 <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_individual.sum_20250311.rds"))
 
 MoveTrait.v0.1$study_id <- as.integer64(MoveTrait.v0.1$study_id)
 ```
 
 ## Quick summary
-We collected movement traits from a total of 119 bird and 61 mammal species represented by 7289 individuals (3856 birds, 3433 mammals). 
-Data of 5518 individuals were collected from Movebank and 1788 from Tucker et al.
+We collected movement traits from a total of 107 bird and 56 mammal species represented by 6351 individuals (3646 birds, 2691 mammals). 
+Data of 4560 individuals were collected from Movebank and 1777 from Tucker et al.
 
 ```{r,echo=F}
 MoveTrait.v0.1 |>  tally()
@@ -85,7 +85,7 @@ pant <- read.table("./DATA/species_traits/PanTHERIA_1-0_WR05_Aug2008.txt",
 ## Fig1A - log body mass versus log monthly MCP
 
 ```{r}
-MoveTrait.v0.1.sp <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_species.sum_20250305.rds"))
+MoveTrait.v0.1.sp <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_species.sum_20250311.rds"))
 ```
 
 ```{r}
@@ -95,17 +95,17 @@ MoveTrait.v0.1.sp <- MoveTrait.v0.1.sp |>
 MoveTrait.v0.1.sp <- MoveTrait.v0.1.sp |> 
   filter(movement.mode %nin% c("arboreal","swim")) |> 
   filter(!(class == "mammal" & movement.mode == "fly"))
-
-MoveTrait.v0.1.sp[MoveTrait.v0.1.sp$common_name %in% "Artic fox", "common_name"]<-"Arctic fox"
 ```
+
 
 ```{r, fig.showtext = TRUE}
 cols <- c("1" = "#228833", "2" = "#4477AA", "3" = "#AA3377")
 
- tot <- c("White-tailed deer","Pronghorn","African elephant","Mongolian gazelle","Lion","Roe deer","Cheetah", "Coyote", "South american tapir","African forest elephant","Arctic fox","Reindeer/caribou","Nyala","Raccoon","Plains zebra")
+ tot <- c("White-tailed deer","African elephant", "South american tapir","African forest elephant","Reindeer/caribou","Nyala","Raccoon","Blue wildebeest","Bobcat","Fisher","Cape bushbuck","Chamois","Kinkajou","Cougar","Golden jackal")
  
- below <- c("White-tailed deer","Pronghorn","Red deer","Arctic fox","Nyala","Raccoon","Plains zebra")
- left <- c("African elephant","Mongolian gazelle","Lion","Roe deer","Cheetah", "South american tapir","African forest elephant", "Coyote","Reindeer/caribou")
+ below.l <- c("White-tailed deer","Red deer","Nyala","Raccoon","Blue wildebeest","Bobcat","Fisher","Cougar")
+ left <- c("African elephant","African forest elephant", "Reindeer/caribou")
+ right <- c("Cape bushbuck","Chamois","Kinkajou","South american tapir","Golden jackal")
 
 dat.FigA <-
   MoveTrait.v0.1.sp |> 
@@ -113,21 +113,28 @@ dat.FigA <-
   dplyr::select(mcp1m.mean,common_name,species) |> 
   filter(!is.na(mcp1m.mean)) |>
   dplyr::mutate(label_above = ifelse(common_name %in% tot, "", common_name),
-                  label_below = ifelse(common_name %in% below, common_name, ""),
-                  label_left = ifelse(common_name %in% left, common_name, "")) |>
-  #dplyr::mutate(label_above = common_name) |>
+                  label_below = ifelse(common_name %in% below.l, common_name, ""),
+                  label_left = ifelse(common_name %in% left, common_name, ""),
+                  label_right = ifelse(common_name %in% right, common_name, "")) |>
   left_join(pant[,c("MSW05_Binomial","X6.2_TrophicLevel","X5.1_AdultBodyMass_g")], 
             by = c("species" = "MSW05_Binomial")) |> 
-    mutate(
-    X6.2_TrophicLevel = factor(X6.2_TrophicLevel)) |>
-    mutate(
-    X6.2_TrophicLevel = factor(X6.2_TrophicLevel),
-    X6.2_TrophicLevel = fct_recode(X6.2_TrophicLevel, 
-                                        "2" = "-999"),
-    X6.2_TrophicLevel = fct_relevel(X6.2_TrophicLevel, "1","2")) |>
+  mutate(X6.2_TrophicLevel = as.character(X6.2_TrophicLevel)) |>
   mutate(AdultBodyMass_kg = X5.1_AdultBodyMass_g/1000) |> 
-  filter(!is.na(AdultBodyMass_kg)) |> droplevels() |> 
   mutate(mcp1m.mean = mcp1m.mean* 0.000001)
+
+# rename trophic level for missing species
+  dat.FigA[dat.FigA$X6.2_TrophicLevel %in% "-999","species"]
+  dat.FigA[dat.FigA$species %in% c("Equus quagga",
+                                   "Lepus europaeus",
+                                   "Capreolus capreolus"),"X6.2_TrophicLevel"] <- "1"
+  dat.FigA[dat.FigA$species %in% c("Papio anubis"),"X6.2_TrophicLevel"] <- "2"
+
+  dat.FigA[is.na(dat.FigA$X6.2_TrophicLevel),"species"]
+  dat.FigA[dat.FigA$species %in% c("Tragelaphus sylvaticus"),"X6.2_TrophicLevel"] <- "1"
+  
+  dat.FigA[is.na(dat.FigA$AdultBodyMass_kg),"species"]
+  dat.FigA[dat.FigA$species %in% c("Tragelaphus sylvaticus"),"AdultBodyMass_kg"] <- 50
+
 
   m1b <- lm(log(mcp1m.mean) ~ log(AdultBodyMass_kg),dat.FigA)
   summary(m1b)
@@ -141,21 +148,24 @@ FigA <-
         y =  expression ("Monthly range size"~(km^2)),
         title = "Species level", tag = "A") +
   geom_text(aes(label = label_above),
-            size = 2, position = position_dodge(width = 1),
+            size = 1.8, position = position_dodge(width = 1),
             vjust = -0.55,hjust = -0.12) +
   geom_text(aes(label = label_below),
-            size = 2,position = position_dodge(width = 1),
+            size = 1.8,position = position_dodge(width = 1),
             vjust = 1.2,hjust = 1.1) +
   geom_text(aes(label = label_left),
-            size = 2,position = position_dodge(width = 1),
+            size = 1.8,position = position_dodge(width = 1),
             vjust = -0.55,hjust = 0.8) +
-  scale_x_continuous(limits = c(1,8.5),
+  geom_text(aes(label = label_right),
+            size = 1.8,position = position_dodge(width = 1),
+            vjust = 0.5,hjust = -0.12) +
+  scale_x_continuous(limits = c(0.8,8.6),
                      breaks = c(log(5),log(50),log(500),log(5000)),
                      labels = c(5,50,500,5000)) +
   scale_y_continuous(breaks = c(log(0.1),log(1),log(10),log(100), log (1000)),
                      labels = c(0.1, 1,10,100, 1000)) +
   geom_text(x = 7.8, y = 2, size = 3.5,
-            label = expression(R^2 ~ "= 0.19")) +
+            label = expression(R^2 ~ "= 0.22")) +
   scale_color_manual(values=cols, name="",labels = c("Herbivore", "Omnivore","Carnivore"),na.translate = F) +
   theme_bw(base_size = 11, base_family = "Avenir") +
   theme(legend.position = c(0.8,0.22), #c(0.8, 0.2)
@@ -167,7 +177,6 @@ FigA <-
         legend.spacing.x = unit(0.2, 'cm'),
         legend.spacing.y = unit(0.1, 'cm'),
         legend.text = element_text(margin = margin(l = -3)),
-        #axis.title.y = element_text(vjust = -2),
         plot.tag.position = c(0.02, 0.99),
         plot.margin = unit(c(5.5,5.5,5.5,1), "points")
         # ,
@@ -178,9 +187,11 @@ FigA <-
         )
 ```
 
+Based on 42 species
+
 # Figure 2 - inter-individual variability
 
-Only including species with at least 10 individuals!! 
+Only including species with at least 10 individuals!! 27 species
 
 ## 24hr displacement distance
 ```{r,echo=F,warning=FALSE,message=FALSE,fig.showtext = TRUE}
@@ -193,11 +204,6 @@ dat.FigB <-
   MoveTrait.v0.1 |> 
   filter(class == "mammal") |> 
     left_join(pant, by = c("species" = "MSW05_Binomial")) |> 
-    mutate(
-    X6.2_TrophicLevel = factor(X6.2_TrophicLevel),
-    X6.2_TrophicLevel = fct_recode(X6.2_TrophicLevel, 
-                                        "2" = "-999"),
-    X6.2_TrophicLevel = fct_relevel(X6.2_TrophicLevel, "1","2")) %>%
   filter(d24h.mean < 30000) |> 
   dplyr::select(d24h.mean,common_name,species,X6.2_TrophicLevel) |> 
   filter(!is.na(d24h.mean)) |> 
@@ -208,7 +214,13 @@ dat.FigB <-
   ungroup() |> 
   droplevels()
 
-dat.FigB[dat.FigB$species == "Equus ferus","X6.2_TrophicLevel"] <- "1"
+# assign trophic level for missing species
+dat.FigB[!duplicated(dat.FigB$species) & dat.FigB$X6.2_TrophicLevel %in% "-999","species"]
+dat.FigB[!duplicated(dat.FigB$species) & is.na(dat.FigB$X6.2_TrophicLevel),"species"]
+
+  dat.FigB[dat.FigB$species %in% c("Equus quagga",
+                                   "Lepus europaeus"),"X6.2_TrophicLevel"] <- 1
+  dat.FigB[dat.FigB$species %in% c("Papio anubis"),"X6.2_TrophicLevel"] <- 2
 
 dat.FigB <- dat.FigB |> 
   mutate(common_name = Hmisc::capitalize(common_name))
@@ -250,14 +262,16 @@ This needs to be developed a lot more!!!! Any ideas welcome - I was thinking alo
 Would be cool to include a temperature gradient.
 
 ```{r}
-MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250305.rds"))
+MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250311.rds"))
 ```
 
 ```{r,echo=F}
 d24h.raw <- MoveTrait.v0.1_spatial |> 
   unnest(displ.24h) |> 
-  dplyr::select("individual_id","species","common_name","class","movement.mode",
-                "D24h","x","y","contact_person_name","source")
+  dplyr::select("individual_id","species","common_name",
+                "d24h","t_","x_","y_","contact_person_name","source") |> 
+  rename(x = x_)|> 
+  rename(y = y_)
 ```
 
 Mule deer 24hr displacement against HFI
@@ -271,7 +285,7 @@ Extract human footprint downloaded from https://doi.org/10.7927/H46T0JQ4
 ```{r}
 library(terra)
 hfi<-rast("/Users/ahertel/Documents/Work/GIS/HumanFootprintIndex/V3/wildareas-v3-2009-human-footprint.tif")
-d24h.mule.sf <- sf::st_as_sf(mule, coords = c(7:8))
+d24h.mule.sf <- sf::st_as_sf(mule, coords = c(6:7))
 sf::st_crs(d24h.mule.sf) <- 4326
 vect_d24h <- vect(d24h.mule.sf)
 reprojected_vect_d24h <- project(vect_d24h, crs(hfi))
@@ -307,11 +321,12 @@ model.results <- data.frame(
 
 # Loop through each pairwise comparison
 for (pair in pairwise_comparisons) {
+  
   # Subset data for the current pair of factor levels
   subset_data <- mule.high.hfi %>% filter(individual_id %in% pair)
   
   # Fit the linear model
-  model <- lm(D24h ~ hfi * individual_id, data = subset_data)
+  model <- lm(d24h ~ hfi * individual_id, data = subset_data)
   
   # Extract the p-value for the factor variable
   p_value_int <- round(summary(model)$coefficients[3, 4],3)
@@ -333,7 +348,7 @@ p.sign <- model.results |>
   filter(P_ID < 0.05 & P_int < 0.05)
 ```
 
-For 267 out of 1653 pairwise comparisons, the two individuals in question move significantly different along the HFI gradient. 
+For 258 out of 1653 pairwise comparisons, the two individuals in question move significantly different along the HFI gradient. 
 
 ```{r, eval = F}
 significant_comparisons <- p.sign$Comparison
@@ -359,7 +374,7 @@ for (pair in filtered_pairwise_comparisons) {
 
 # Plot significant comparisons (exemplary last 20 sign comparisons)
 ggplot(comparison_data[comparison_data$Comparison %in% levels(factor(comparison_data$Comparison))[248:270],],
-       aes(x = hfi, y = D24h, group = individual_id,color = individual_id)) + 
+       aes(x = hfi, y = d24h, group = individual_id,color = individual_id)) + 
   geom_point()+
   geom_smooth(method = "lm")+
   facet_wrap(~Comparison)+
@@ -386,8 +401,8 @@ mapview(map.mule,
 
 
 ```{r}
-model1 <- lm(D24h ~ hfi * individual_id, data = mule.high.hfi)
-model2 <- lm(D24h ~ hfi + individual_id, data = mule.high.hfi)
+model1 <- lm(d24h ~ hfi * individual_id, data = mule.high.hfi)
+model2 <- lm(d24h ~ hfi + individual_id, data = mule.high.hfi)
 
 anova(model2, model1, test = "LRT")
 
@@ -404,7 +419,7 @@ Plot Reaction norm Panel C
 FigC <-
 ggplot(data      = mule.high.hfi,
        aes(x     = hfi,
-           y     = D24h/1000,
+           y     = d24h/1000,
            col   = individual_id,
            group = individual_id))+ #to add the colours for different classes
   geom_point(size     = 1.2,
@@ -466,35 +481,35 @@ avonet.trophic <- rbind(avonet.bt[,c("Species3","Trophic.Level")],avonet.eb[,c("
 avonet.trophic <- avonet.trophic[!duplicated(avonet.trophic$Species3),]
 ```
 
+74 species
+
 ```{r,echo=F,warning=FALSE,message=FALSE,fig.showtext = TRUE}
 cols2 <- c("Herbivore" = "#228833", "Scavenger" = "#CCBB44", "Carnivore" = "#AA3377")
+
+# need to filter out extreme outliers
 
 dat.FigSA <-
   MoveTrait.v0.1.sp |> 
   filter(class == "bird") |> 
   dplyr::select(d1h.mean,common_name,species) |> 
   filter(!is.na(d1h.mean)) |> 
-  filter(d1h.mean < 100000) |> 
-  # dplyr::mutate(label_above = ifelse(common_name %in% aboveright, "", common_name),
-  #               label_aboveright = ifelse(common_name %in% aboveright, common_name, "")) |> 
+  filter(d1h.mean < 110000) |> 
+  dplyr::mutate(outlier = ifelse(d1h.mean > 9800, common_name, NA)) |> 
   droplevels() |>  
   left_join(kips, by = c("species" = "scientificNameStd")) |> 
   left_join(avonet.trophic, by = c("species" = "Species3")) |> 
   filter(!is.na(Trophic.Level)) 
 
-  m2 <- lm((d1h.mean/1000) ~ Hand.wing.Index,dat.Fig1C)
+  m2 <- lm((d1h.mean/1000) ~ Hand.wing.Index,dat.FigSA)
   summary(m2)
 
 FigSA <-
   ggplot(dat.FigSA, aes(x = Hand.wing.Index, y = d1h.mean/1000)) + 
   geom_point(aes(color = Trophic.Level)) + 
   geom_smooth(method='lm', col = "black",se=F) +
-  # geom_text(aes(label = common_name),
-  #           size = 1.8, position = position_dodge(width = 1),
-  #           vjust = -0.5,hjust = -0.1) +
-  # geom_text(aes(label = label_aboveright),
-  #           size = 1.8,position = position_dodge(width = 1),
-  #           vjust = -0.5,hjust = 1) +
+  geom_text(aes(label = outlier),
+            size = 1.8, position = position_dodge(width = 1),
+            vjust = -1,hjust = 0.5) +
   labs(x="Hand-wing Index",y="Mean hourly displacement (km)",tag="A", title = "Species level")+
     geom_text(x = 30, y = 12, size = 3.5,
             label = expression(R^2 ~ "< 0.01")) +
@@ -504,11 +519,12 @@ FigSA <-
   scale_color_manual(values=cols2, 
                      name="", 
                      breaks = c("Herbivore", "Scavenger","Carnivore"))+
-  theme(legend.position = c(0.15, 0.9),
+  theme(legend.position = c(0.8, 0.9),
         legend.background = element_rect(fill="transparent"),
         legend.key = element_rect(colour = "transparent", fill = "transparent"),
         legend.title=element_text(size=10)) +
-  scale_x_continuous(limits = c(25, 62),expand = c(0,0)) +
+  scale_x_continuous(limits = c(22.5, 70),expand = c(0,0)) +
+  scale_y_continuous(limits = c(0, 60),expand = c(0.01,0.01)) +
   guides(color = guide_legend(byrow = TRUE)) +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         legend.spacing.y = unit(5, "cm"),
@@ -523,6 +539,9 @@ FigSA <-
 ```
 
 ## 24hr displacement distance
+
+49 species
+
 ```{r,echo=F,warning=FALSE,message=FALSE,fig.showtext = TRUE}
 FigSB <- 
   MoveTrait.v0.1 |> 
@@ -571,46 +590,29 @@ FigSB <-
 
 ```
 
-## Monthly Intensity of use in migratory ungulates
+## Monthly Intensity of use of raptors
 
 ```{r,echo=F}
-MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250305.rds"))
+MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250311.rds"))
 
 IoU.1m.raw <- MoveTrait.v0.1_spatial |>
   unnest(iou.1m)|> 
-  dplyr::select("individual_id","species","common_name","class","year","month","iou1m") |> 
+  dplyr::select("study_id","individual_id","species","common_name","class","year","month","iou1m","contact_person_name") |> 
   filter(!is.na(iou1m))
 ```
 
 ## Monthly Intensity of use in migratory raptors
 ```{r,echo=F}
-# baldeagle <- IoU.1m.raw |> 
-#   filter(common_name %in% c("bald eagle"))  
-
 rap <- IoU.1m.raw |> 
   filter(class == "bird") |> 
   filter(iou1m < 200) |> 
-  filter(common_name %in% c("bald eagle","common buzzard","eurasian griffon vulture","golden eagle","lappet-faced vulture","red-tailed hawk","white-backed vulture","white-bellied sea eagle")) 
+  filter(common_name %in% c("eurasian griffon vulture")) 
 
 rap$id_year <- paste(rap$individual_id,rap$year,sep="_")
-
-ggplot()+ 
-  geom_point(data = rap[rap$common_name %in% "eurasian griffon vulture",],
-             aes(x = month,y = iou1m, col = id_year, group = id_year),
-             size = 1.5, shape = 19)+
-  geom_smooth(data = rap[rap$common_name %in% "eurasian griffon vulture",], 
-              aes(x = month,y = iou1m, col = id_year, group = id_year),
-              size   = .8, se = F) +
-  facet_wrap(~id_year)+
-  theme(legend.position = "none")
 ```
 
 ```{r,fig.showtext = TRUE}
-# 7904466_2009; 7904469_2009 - white-backed vulture - ors (Orr Spiegel)
-# 2943553_2009; 2943559_2007 - bald eagle - roland kays
-# 186182027_2017, 186182027_2023 - eurasian griffon vulture - Fiederer
-
-#FigSC <-
+FigSC <-
   ggplot()+ 
   geom_point(data = rap[rap$id_year %in% 
                                 c("186182027_2017" , "186182027_2023"),],
@@ -620,15 +622,18 @@ ggplot()+
                                 c("186182027_2017" , "186182027_2023"),], 
               aes(x = month,y = iou1m, col = id_year, group = id_year),
               size   = .8, se = F) +
-  scale_color_manual(values = c("#44AA99","#332288"))+
+  scale_color_manual(values = c("#44AA99","#332288"),
+                     guide = guide_legend(title = NULL),
+                     labels = c("Subadult","Breeding"))+
   scale_x_continuous(expand=c(0.01,0.01))+
   labs(x = "Month",
        y = "Monthly intensity of use",
        title = "Within-individual level",
         tag = "C") +
   theme_bw(base_size = 11, base_family = "Avenir") +
-  theme(legend.position = "none")+
+  theme(legend.position = c(0.83,0.91))+
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.background = element_rect(fill = NA),
         plot.tag.position = c(0.02, 0.99),
         plot.margin = unit(c(5.5,5.5,5.5,1), "points"))
 

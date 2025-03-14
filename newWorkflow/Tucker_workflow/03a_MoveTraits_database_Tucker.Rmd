@@ -70,7 +70,7 @@ movedata <-
 Keep only data from 2019, i.e. not during Covid lockdowns
 ```{r select time}
 movedata <- movedata %>% 
-  filter(year < 2020)
+  filter(year < 2020) 
 ```
 
 # Resample data to 1h, 24h time scales
@@ -108,36 +108,15 @@ animlocs.1hourly <- movedata %>%
   group_split() %>% 
   map(~ make_and_resample_track(., sampling.interval = 1, 
                                  tolerance = 15)) %>% 
-  setNames(unique(movedata$individual_id)) %>% 
-  do.call("rbind", .) 
+  setNames(unique(movedata$individual_id)) 
 
 animlocs.daily <- movedata %>%
   group_by(individual_id) %>%
   group_split() %>%
   map(~ make_and_resample_track(., sampling.interval = 24,
                                 tolerance = 15)) %>%
-  setNames(unique(animlocs.1hourly$individual_id)) %>%
-  do.call("rbind", .)
-```
+  setNames(unique(animlocs.1hourly$individual_id)) 
 
-We then create a new resampled data set with both hourly and daily relocation intervals and the metadata for each track.
-
-```{r build resampled dataset,warning=FALSE}
-data_resampled <- movedata %>%
-  tidyr::nest(-individual_id) %>% 
-  dplyr::select(-data) %>% # just a quick trick to keep things flowing.
-  left_join(., movedata[!duplicated(movedata$individual_id),c("species","individual_id","animal_mass","contact_person_name")], 
-            by = c("individual_id" = "individual_id")) %>% 
-  # 1 hourly
-  left_join(.,  animlocs.1hourly %>%
-              tidyr::nest(-individual_id), 
-            by = c("individual_id" = "individual_id")) %>% 
-  dplyr::rename(animlocs.1hourly = data) %>% 
-  # daily 
-  left_join(.,  animlocs.daily %>%
-            tidyr::nest(-individual_id),
-          by = c("individual_id" = "individual_id")) %>%
-  dplyr::rename(animlocs.daily = data)
 ```
 
 # Calculate movement metrics
@@ -149,12 +128,20 @@ The distance moved over a given time period, based on a specific GPS relocation 
 As input to calculate hourly displacement we use the resampled hourly dataset. We only include individuals with at least 167 hourly relocations, which is equivalent to 1 week of data.
 
 ```{r prepare 1h locs}
-animlocs.1hourly_sl <- 
-  animlocs.1hourly |> filter(n() > 167) %>% 
-  mutate(d1h = step_lengths(.)*100000) |> 
-  dplyr::select(individual_id, t_, d1h, x_, y_) |> 
-  mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
-  filter(!is.na(d1h))
+animlocs.1hourly_sl <- data.frame()
+
+for (i in 1:length(animlocs.1hourly)) {
+  temp_df <- animlocs.1hourly[[i]] %>% 
+    filter(n() > 167) %>% 
+    mutate(d1h = step_lengths(.)*100000) |> 
+    mutate(time_diff = as.numeric(difftime(lead(t_),t_, units = "mins"))) |> 
+    filter(time_diff >= 45 & time_diff <= 75) |> 
+    dplyr::select(individual_id,t_, d1h, x_, y_) |> 
+    mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
+    filter(!is.na(d1h))
+
+animlocs.1hourly_sl <- rbind(animlocs.1hourly_sl,as.data.frame(temp_df))
+}
 ```
 
 ### Maximum 24hr displacement
@@ -162,6 +149,7 @@ Group all GPS relocations within a 24hr interval. Include only days with at leas
 
 ```{r max 24hr displacement, class.source = 'fold-hide'}
 locs1h <- animlocs.1hourly %>% 
+  do.call("rbind", .) |>  
   mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
   mutate(id.ymd = paste(individual_id,ymd,sep="_")) |> 
   group_by(id.ymd) %>% 
@@ -202,21 +190,31 @@ rm(mean.coord);rm(locs1h)
 Straight line displacement distance between 24hr relocations. Include only individual which have relocation data on at least 30 days (1 month of data)
 
 ```{r 24hr displacement, class.source = 'fold-hide'}
-animlocs.daily_sl <- animlocs.daily |> 
-  filter(n() > 30) %>% 
-  mutate(d24h = step_lengths(.)*100000) |> 
-  dplyr::select(individual_id, t_, d24h, x_, y_) |> 
-  mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d")),
+animlocs.daily_sl <- data.frame()
+
+for (i in 1:length(animlocs.daily)) {
+  #i = 1
+  temp_df <- animlocs.daily[[i]] %>% 
+    filter(n() > 30) %>% 
+    mutate(d24h = step_lengths(.)*100000) |> 
+    mutate(time_diff = as.numeric(difftime(lead(t_),t_, units = "hours"))) |> 
+    filter(time_diff >= 20 & time_diff <= 28) |> 
+    dplyr::select(individual_id,t_, d24h, x_, y_) |> 
+    mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d")),
          month = lubridate::month(t_),
-         year = lubridate::year(t_))|> 
-  filter(!is.na(d24h))
+         year = lubridate::year(t_)) |> 
+    filter(!is.na(d24h))
+
+animlocs.daily_sl <- rbind(animlocs.daily_sl,as.data.frame(temp_df))
+}
 ```
 
 ### Maximum 7day displacement distance
 Based on daily (24h) relocations we calculate the maximum weekly displacemnt from all pairwise comparisons including only weeks with at least 5 relocation and individuals with at least 10 weeks of data.
 
 ```{r class.source = 'fold-hide'}
-locs24h <- animlocs.daily |> 
+locs24h <- animlocs.daily %>% 
+  do.call("rbind", .) |>  
   mutate(week = as.numeric(strftime(t_,format="%W")), year = as.numeric(strftime(t_,format="%Y")),
          year_week = paste(year,week, sep="_")) |> 
   mutate(id.year_week = paste(individual_id,year_week,sep="_")) |>  
@@ -259,6 +257,7 @@ Daily range used based on hourly relocations including only individuals with at 
 
 ```{r,message=FALSE,warning=FALSE}
 dat.mcp.daily <- animlocs.1hourly %>% 
+  do.call("rbind", .) |>  
   tibble() %>% mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d")))  %>%
   filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% 
   mutate(id.day = paste(individual_id,ymd,sep=".")) %>% group_by(id.day) %>% filter(n() > 12) %>% ungroup() %>% 
@@ -292,6 +291,7 @@ Weekly range size based on 1h data with at least 84 hourly relocations (3.5 days
 
 ```{r class.source = 'fold-hide',message=FALSE,warning=FALSE}
 dat.mcp.weekly <- animlocs.1hourly %>% 
+  do.call("rbind", .) |>  
  mutate(week = as.numeric(strftime(t_,format="%W")), 
         year = as.numeric(strftime(t_,format="%Y")),
          year_week = paste(year,week, sep="_")) %>% 
@@ -325,7 +325,8 @@ rm(dat.mcp.weekly);rm(mean.coord)
 Monthly MCPs with based on daily relocations, include only individulas with at least 14 days of data
 
 ```{r class.source = 'fold-hide',message=FALSE,warning=FALSE}
-dat.mcp.monthly <- animlocs.daily |>  
+dat.mcp.monthly <- animlocs.daily %>% 
+  do.call("rbind", .) |>   
   mutate(year_month = paste(year,month,sep="_")) |> 
   mutate(id.month = paste(individual_id,year_month,sep=".")) %>% 
   filter(!is.na(x_)) %>% filter(!is.na(y_)) %>% group_by(id.month) %>% 

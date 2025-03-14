@@ -36,11 +36,6 @@ print(db.movebank)
 dim(db.movebank)
 colnames(db.movebank)
 
-# remove empty column "n.max24h.days
-nrow(db.movebank[!is.na(db.movebank$n.max24h.days),])
-nrow(db.movebank[!is.na(db.movebank$n.dmax24h.days),])
-db.movebank <- db.movebank[,c(1:16,83,18:82)]
-
 # Remove rows with all NA values
 db.movebank.1 <- 
   db.movebank %>%
@@ -81,9 +76,12 @@ metadata2 <- readRDS(paste0(pathTOfolder,"full_table_all_studies.rds"))
 colnames(metadata2)[7] <- "study_id"
 
 db.movebank.3 <- db.movebank.2 |>
-  left_join(metadata2[,c("study_id","contact_person_name")], by = "study_id") 
+  left_join(metadata2[,c("study_id","contact_person_name","license_type","citation")], by = "study_id") 
 
-#nrow(db.movebank.3) == nrow(db.movebank.2)  
+## ----Rename species name-------------------------------------------------------------
+
+#  Martes pennanti == Pekania pennanti
+db.movebank.3[db.movebank.3$species %in% c("Pekania pennanti"),"species"] <-"Martes pennanti"
 
 ## ----Merge common name and exclude reptiles, fish etc.-------------------------------------------------------------
 
@@ -105,9 +103,9 @@ db.movebank.4 <- db.movebank.4 |>
 
 #nrow(db.movebank.4) == nrow(db.movebank.3)  
 
-# 5514 individuals
+# 4574 individuals
 dim(db.movebank.4)
-# 264 studies
+# 243 studies
 length(unique(db.movebank.4$study_id))
 
 ## ----Merge Tucker data-------------------------------------------------------------
@@ -155,6 +153,14 @@ colnames(db.tucker)[colnames(db.tucker) %nin% colnames(db.movebank.4)]
 MoveTrait.v0.1 <- plyr::rbind.fill(db.movebank.4,db.tucker)
 dim(MoveTrait.v0.1)
 
+MoveTrait.v0.1 <- MoveTrait.v0.1 |> 
+  dplyr::select("study_id","individual_id",
+                "species","common_name","class","movement.mode",
+                "sex","animal_mass","animal_life_stage","source",
+                "mean.longitude":"di.05","median_timelag_mins","tracking_duration_days",
+                "tracking_start_date","tracking_end_date","contact_person_name",
+                "license_type","citation")
+
 ## ----Save individual level Database-------------------------------------------------------------
 
 # final recode of species labels 
@@ -165,18 +171,17 @@ MoveTrait.v0.1 <- MoveTrait.v0.1 |>
   mutate(species = fct_recode(species, "Loxodonta africana" = "Elephantidae"))|> 
   mutate(species = fct_recode(species, "Cervus elaphus" = "Cervus canadensis"))
 
-# 119 bird sp., 61 mammal sp.
+# 108 bird sp., 55 mammal sp.
 MoveTrait.v0.1 |> filter(!duplicated(species)) |> group_by(class) |>  tally()
-MoveTrait.v0.1 |> filter(!duplicated(common_name)) |> group_by(class) |>  tally()
-# 3853 bird ind., 3495 mammal ind. - 7348 ind total
+# 3660 bird ind., 2691 mammal ind. - 6351 ind total
 MoveTrait.v0.1 |> tally()
 MoveTrait.v0.1 |> group_by(class) |>  tally()
-#1834 tucker, 5514 movebank
+#1777 tucker, 4574 movebank
 MoveTrait.v0.1 |> group_by(source) |>  tally()
 
 dir.create(paste0(pathTOfolder,"7.MoveTraits_db"))
 pthdb <- paste0(pathTOfolder,"7.MoveTraits_db/")
-saveRDS(MoveTrait.v0.1, file=paste0(pthdb,"MoveTrait.v0.1_individual.sum_20250305.rds"))
+saveRDS(MoveTrait.v0.1, file=paste0(pthdb,"MoveTrait.v0.1_individual.sum_20250311.rds"))
 
 ## ----Species level Database-------------------------------------------------------------
 
@@ -195,36 +200,45 @@ MoveTrait.v0.1.sp <- MoveTrait.v0.1 |>
   mutate(common_name = recode(common_name, "elk" = "red deer/elk")) |> 
   mutate(common_name = recode(common_name, "red deer" = "red deer/elk"))
 
-MoveTrait.v0.1.species <-
+MoveTrait.v0.1.sp <-
   MoveTrait.v0.1.sp |> 
-  group_by(species) |> 
-  summarise(common_name = unique(common_name),
+  dplyr::select(3:6,13:90,95) 
+
+MoveTrait.v0.1.sp2 <- 
+  MoveTrait.v0.1.sp |> 
+  group_by(species) |>
+  mutate(species = unique(species),
+            common_name = unique(common_name),
             class = unique(class),
             movement.mode = unique(movement.mode),
-            across(c(6:10,12:16,18:22,24:28,30:34,36:40,42:46,48:52,54:58,60:64,66:70,72:76,78:82), 
+            across(c("n1h","n24h.days","n.dmax24h.days","n.dmax7d.weeks",
+                            "n.max12m.years","n.mcp24h.days","n.mcp7d.weeks",  "n.mcp1m.months",
+                            "n.mcp12m.years","n.iou24h.days","n.iou1m.month", "n.iou12m.year", 
+                            "n.di.days"), 
+                          sum, na.rm = TRUE),
+            across(c("d1h.mean",       "d1h.median",     "d1h.cv",         "d1h.95",        
+                            "d1h.05",         "d24h.mean",      "d24h.median",    "d24h.cv",       
+                            "d24h.95",        "d24h.05",        "dmax24h.mean",   "dmax24h.median",
+                            "dmax24h.cv",     "dmax24h.95",     "dmax24h.05",     "dmax7d.mean",   
+                            "dmax7d.median",  "dmax7d.cv",      "dmax7d.95",      "dmax7d.05",     
+                            "dmax12m.mean",   "dmax12m.median", "dmax12m.cv",     "dmax12m.95",    
+                            "dmax12m.05",     "mcp24h.mean",    "mcp24h.median",  "mcp24h.cv",     
+                            "mcp24h.95",      "mcp24h.05",      "mcp7d.mean",     "mcp7d.median",  
+                            "mcp7d.cv",       "mcp7d.95",       "mcp7d.05",       "mcp1m.mean",    
+                            "mcp1m.median",   "mcp1m.cv",       "mcp1m.95",       "mcp1m.05",      
+                            "mcp12m.mean",    "mcp12m.median",  "mcp12m.cv",      "mcp12m.95",     
+                            "mcp12m.05",      "iou24h.mean",    "iou24h.median",  "iou24h.cv",     
+                            "iou24h.95",      "iou24h.05",      "iou1m.mean",     "iou1m.median",  
+                            "iou1m.cv",       "iou1m.95",       "iou1m.05",       "iou12m.mean",   
+                            "iou12m.median",  "iou12m.cv",      "iou12m.95",      "iou12m.05",     
+                            "di.mean",        "di.median",      "di.cv",          "di.95",         
+                            "di.05"), 
                    mean, na.rm = TRUE),
-            across(c(5,11,17,23,29,35,41,47,53,59,65,71,77), 
-                             sum, na.rm = TRUE),
-            contact_person_name = paste(unique(contact_person_name), collapse = ", ")) 
+            contact_person_name = paste(unique(contact_person_name), collapse = ", ")) |> 
+  distinct()
 
-# sort columns
-MoveTrait.v0.1.species <- MoveTrait.v0.1.species[,c(1:4,
-                                                    70,5:9,
-                                                    71,10:14,
-                                                    72,15:19,
-                                                    73,20:24,
-                                                    74,25:29,
-                                                    75,30:34,
-                                                    76,35:39,
-                                                    77,40:44,
-                                                    78,45:49,
-                                                    79,50:54,
-                                                    80,55:59,
-                                                    81,60:64,
-                                                    82,65:69,
-                                                    83)]
 
-saveRDS(MoveTrait.v0.1.species, file=paste0(pthdb,"MoveTrait.v0.1_species.sum_20250305.rds"))
+saveRDS(MoveTrait.v0.1.sp2, file=paste0(pthdb,"MoveTrait.v0.1_species.sum_20250311.rds"))
 
 ## ----Save within-individual level Database-------------------------------------------------------------
 
@@ -239,7 +253,7 @@ db.movebank <- flsTS %>%
   bind_rows() 
 
 # sort columns
-db.movebank <- db.movebank[,c(1:16,85,18:82,86,90,87,93,94,83,84,91,95,88,92,96,89)]
+db.movebank <- db.movebank[,c(1:82,85,89,86,92,93,83,84,90,87,91,94,95,88)]
 
 # Remove rows with all NA values
 db.movebank.1 <- 
@@ -280,6 +294,11 @@ colnames(metadata2)[7] <- "study_id"
 db.movebank.3 <- db.movebank.2 |>
   left_join(metadata2[,c("study_id","contact_person_name","license_type","citation")], by = "study_id") 
 
+## ----Rename species name-------------------------------------------------------------
+
+#  Martes pennanti == Pekania pennanti
+db.movebank.3[db.movebank.3$species %in% c("Pekania pennanti"),"species"] <-"Martes pennanti"
+
 ## ----Merge common name and exclude reptiles, fish etc.-------------------------------------------------------------
 
 commonname <- read.csv("/Users/ahertel/Documents/Work/Study_MoveTraits/database v 0.0/MoveTraitsDatabase_Git/MoveTraits_Git/DATA/SpeciesList_commonname.csv")
@@ -300,9 +319,9 @@ db.movebank.4 <- db.movebank.4 |>
 
 #nrow(db.movebank.4) == nrow(db.movebank.3)  
 
-# 5518 individuals
+# 4560 individuals
 dim(db.movebank.4)
-# 265 studies
+# 243 studies
 length(unique(db.movebank.4$study_id))
 
 ## ----Merge Tucker data-------------------------------------------------------------
@@ -332,6 +351,8 @@ db.tucker <- db.tucker |>
   left_join(commonname, by = "species") |> 
   dplyr::select(-include)
 
+db.tucker |> group_by(class) |>  tally()
+
 # dimensions of movebank and Tucker files
 dim(db.tucker)
 dim(db.movebank.4)
@@ -359,4 +380,4 @@ MoveTrait.v0.1.spatial.2 |> group_by(class) |>  tally()
 MoveTrait.v0.1.spatial.2 |> group_by(source) |>  tally()
 
 pthdb <- paste0(pathTOfolder,"7.MoveTraits_db/")
-saveRDS(MoveTrait.v0.1.spatial.2, file=paste0(pthdb,"MoveTrait.v0.1_withinindividual_20250305.rds"))
+saveRDS(MoveTrait.v0.1.spatial.2, file=paste0(pthdb,"MoveTrait.v0.1_withinindividual_20250311.rds"))

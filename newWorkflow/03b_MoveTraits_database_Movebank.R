@@ -12,9 +12,6 @@ pathTOfolder <- "./DATA/MoveTraitsData/"
 
 pthamt1h <- paste0(pathTOfolder,"4.MB_indv_amt_1h/")
 
-#"20873986_164280454"
-#"2943485_2943558"
-
 #dir for individual summaries
 dir.create(paste0(pathTOfolder,"5.MB_indv_traitsum"))
 pthtraitsum <- paste0(pathTOfolder,"5.MB_indv_traitsum/")
@@ -24,8 +21,8 @@ pthtrait <- paste0(pathTOfolder,"6.MB_indv_trait/")
 
 
 flsMV <- list.files(pthamt1h, full.names = F)
-# done <- list.files(pthtraitsum, full.names = F)
-# flsMV <- flsMV[!flsMV%in%done]
+ done <- list.files(pthtraitsum, full.names = F)
+ flsMV <- flsMV[!flsMV%in%done]
 
 referenceTableStudies <- readRDS(paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 referenceTableStudiesUsed <- referenceTableStudies[referenceTableStudies$excluded=="no",]
@@ -78,6 +75,8 @@ data_resampled <- animlocs.1hourly %>%
 animlocs.1hourly_sl <- 
   animlocs.1hourly |> filter(n() > 167) %>% 
   mutate(d1h = step_lengths(.)*100000) |> 
+  mutate(time_diff = as.numeric(difftime(lead(t_),t_, units = "mins"))) |> 
+  filter(time_diff >= 45 & time_diff <= 75) |> 
   dplyr::select(individual_id, t_, d1h, x_, y_) |> 
   mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
   filter(!is.na(d1h))
@@ -129,6 +128,8 @@ rm(mean.coord)
 animlocs.daily_sl <- animlocs.daily |> 
   filter(n() > 30) %>% 
   mutate(d24h = step_lengths(.)*100000) |> 
+  mutate(time_diff = as.numeric(difftime(lead(t_),t_, units = "hours"))) |> 
+  filter(time_diff >= 20 & time_diff <= 28) |> 
   dplyr::select(individual_id, t_, d24h, x_, y_) |> 
   mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d")),
          month = lubridate::month(t_),
