@@ -5,7 +5,7 @@ Developmental version of MoveTraits database
 # Description
 
 The MoveTrait database uses movement data and a standardized workflow to extract a suite of simple, standardized and comparable movement metrics across species. 
-The database is introduced in the manuscript "MoveTraits - Integrating animal behaviour into trait-based ecology" (*preprint link coming soon*).
+The database is introduced in the manuscript "MoveTraits - Integrating animal behaviour into trait-based ecology" (preprint: https://www.biorxiv.org/content/10.1101/2025.03.15.643440v1).
 
 In its first Version (V0.1) the database used open access movebank studies (license types CC_0, CC_BY, CC_BY_NC) and an open-access dataframe published alongside Tucker et al. 2023 (https://www.science.org/doi/abs/10.1126/science.abo6499) and publicly available for download under: https://zenodo.org/records/7704108, file *Tucker_Road_Spatial.rds* as input. We intend to integrate traits from closed-access datasets in the future.
 
