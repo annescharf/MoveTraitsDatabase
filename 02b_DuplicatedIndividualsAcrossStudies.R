@@ -120,11 +120,6 @@ referenceTableStudies_ALL <- referenceTableStudies_ALL[!is.na(referenceTableStud
 
 saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_original_w_sps.rds")) ## just to making sure to have a copy that is untouched, as after this it will be modified and overwritten....  
 
-## remove individuals according to their manipulation type
-table(referenceTableStudies_ALL$manipulation_type)
-referenceTableStudies_ALL <- referenceTableStudies_ALL[is.na(referenceTableStudies_ALL$manipulation_type) | referenceTableStudies_ALL$manipulation_type%in%"none",]
-saveRDS(referenceTableStudies_ALL, file=paste0(pathTOfolder,"/referenceTableStudies_ALL_original_w_sps.rds"))
-
 #######---------------------------------#########
 ## Find duplicated tags within/across studies: ##
 #######---------------------------------#########
