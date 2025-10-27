@@ -15,9 +15,17 @@ pathTOfolder <- "./DATA/MoveTraitsData/"
 
 metadata <- readRDS(paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 metadata[metadata$MBid %in% 1541820092,"excluded"] <- "yes" # exclude Cagan study
+
 metadata[metadata$fileName %in%  c("1120749252_3069649656.rds",
                                    "1120749252_3069649678.rds",
                                    "1120749252_3069649685.rds",
                                    "2950149_2950167.rds") ,"excluded"] <- "yes" # exclude coaties
+
+## ---- Studies to remove - manual cleaning -------------------------------------------------------------
+myremove <- read.csv(paste0(pathTOfolder,"/manual_remove.csv"))
+myremove <- paste(myremove$study_id,myremove$animal_id,sep="_")
+myremove <- paste0(myremove,".rds")
+
+metadata[metadata$fileName %in%  myremove ,"excluded"] <- "yes" 
 
 saveRDS(metadata, paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn_excludedStudies.rds"))

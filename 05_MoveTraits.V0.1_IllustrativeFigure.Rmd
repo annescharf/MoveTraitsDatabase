@@ -21,27 +21,21 @@ library(tidyverse); library(mapview)
 library(ggridges);library(sp); library(hrbrthemes);library(Hmisc);library(showtext); library(bit64)
 ```
 
-```{r}
-font_add(family = "Aptos-Display-Bold", regular = "/Users/ahertel/Downloads/aptos-font/Aptos-Display-Bold.ttf")
-font_add(family = "Aptos-Display", regular = "/Users/ahertel/Downloads/aptos-font/Aptos-Display.ttf")
-font_add(family = "Aptos", regular = "/Users/ahertel/Downloads/aptos-font/Aptos.ttf")
-```
-
 # Exploration of MoveTraits database
 
 First exploration of the MoveTraits database compiled from open access data from the Tucker et al. 2023 "Behavioral responses of terrestrial mammals to COVID-19 lockdowns" (https://zenodo.org/records/7704108, file "Tucker_Road_Spatial.rds") and from all openly available GPS datasets in Movebank (efefctive 06.2024). We only used data from 2019 (i.e., not from 2020 during COVID lockdowns). 
 
 ```{r}
-pathTOfolder <- "./DATA/MoveTraitsData/7.MoveTraits_db/"
+pathTOfolder <- "./DATA/MoveTraitsData/8.MoveTraits_db/"
 
-MoveTrait.v0.1 <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_individual.sum_20250311.rds"))
+MoveTrait.v0.1 <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_individual.sum_20251011.rds"))
 
 MoveTrait.v0.1$study_id <- as.integer64(MoveTrait.v0.1$study_id)
 ```
 
 ## Quick summary
-We collected movement traits from a total of 107 bird and 56 mammal species represented by 6351 individuals (3646 birds, 2691 mammals). 
-Data of 4560 individuals were collected from Movebank and 1777 from Tucker et al.
+We collected movement traits from a total of 97 bird and 52 mammal species represented by 5873 individuals (3294 birds, 2579 mammals). 
+Data of 4096 individuals were collected from Movebank and 1777 from Tucker et al.
 
 ```{r,echo=F}
 MoveTrait.v0.1 |>  tally()
@@ -84,8 +78,15 @@ pant <- read.table("./DATA/species_traits/PanTHERIA_1-0_WR05_Aug2008.txt",
 
 ## Fig1A - log body mass versus log monthly MCP
 
+Get mule deer shape
 ```{r}
-MoveTrait.v0.1.sp <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_species.sum_20250311.rds"))
+library(rphylopic)
+uuid <- get_uuid(name = "Odocoileus hemionus")
+img <- get_phylopic(uuid = uuid)
+```
+
+```{r}
+MoveTrait.v0.1.sp <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_species.sum_20251011.rds"))
 ```
 
 ```{r}
@@ -101,11 +102,12 @@ MoveTrait.v0.1.sp <- MoveTrait.v0.1.sp |>
 ```{r, fig.showtext = TRUE}
 cols <- c("1" = "#228833", "2" = "#4477AA", "3" = "#AA3377")
 
- tot <- c("White-tailed deer","African elephant", "South american tapir","African forest elephant","Reindeer/caribou","Nyala","Raccoon","Blue wildebeest","Bobcat","Fisher","Cape bushbuck","Chamois","Kinkajou","Cougar","Golden jackal")
+ tot <- c("White-tailed deer","African elephant", "South american tapir","African forest elephant","Reindeer/caribou","Nyala","Raccoon","Blue wildebeest","Bobcat","Fisher","Cape bushbuck","Chamois","Kinkajou","Cougar","Golden jackal","Mule deer")
  
  below.l <- c("White-tailed deer","Red deer","Nyala","Raccoon","Blue wildebeest","Bobcat","Fisher","Cougar")
  left <- c("African elephant","African forest elephant", "Reindeer/caribou")
  right <- c("Cape bushbuck","Chamois","Kinkajou","South american tapir","Golden jackal")
+ bold <- c("Mule deer")
 
 dat.FigA <-
   MoveTrait.v0.1.sp |> 
@@ -115,7 +117,8 @@ dat.FigA <-
   dplyr::mutate(label_above = ifelse(common_name %in% tot, "", common_name),
                   label_below = ifelse(common_name %in% below.l, common_name, ""),
                   label_left = ifelse(common_name %in% left, common_name, ""),
-                  label_right = ifelse(common_name %in% right, common_name, "")) |>
+                  label_right = ifelse(common_name %in% right, common_name, ""),
+                label_bold = ifelse(common_name %in% bold, common_name, "")) |>
   left_join(pant[,c("MSW05_Binomial","X6.2_TrophicLevel","X5.1_AdultBodyMass_g")], 
             by = c("species" = "MSW05_Binomial")) |> 
   mutate(X6.2_TrophicLevel = as.character(X6.2_TrophicLevel)) |>
@@ -159,14 +162,18 @@ FigA <-
   geom_text(aes(label = label_right),
             size = 1.8,position = position_dodge(width = 1),
             vjust = 0.5,hjust = -0.12) +
+  geom_text(aes(label = label_bold),
+            size = 2.2,position = position_dodge(width = 1),
+            vjust = 0.5,hjust = -0.12, fontface = "bold") +
   scale_x_continuous(limits = c(0.8,8.6),
                      breaks = c(log(5),log(50),log(500),log(5000)),
                      labels = c(5,50,500,5000)) +
   scale_y_continuous(breaks = c(log(0.1),log(1),log(10),log(100), log (1000)),
                      labels = c(0.1, 1,10,100, 1000)) +
   geom_text(x = 7.8, y = 2, size = 3.5,
-            label = expression(R^2 ~ "= 0.22")) +
-  scale_color_manual(values=cols, name="",labels = c("Herbivore", "Omnivore","Carnivore"),na.translate = F) +
+            label = expression(R^2 ~ "= 0.20")) +
+  scale_color_manual(values=cols, name="",labels = c("Herbivore", "Omnivore","Carnivore"),
+                     na.translate = F) +
   theme_bw(base_size = 11, base_family = "Avenir") +
   theme(legend.position = c(0.8,0.22), #c(0.8, 0.2)
         legend.background = element_rect(fill="transparent"),
@@ -174,20 +181,17 @@ FigA <-
         legend.title=element_text(size=10),
         panel.grid.major = element_blank(), 
         panel.grid.minor = element_blank(),
+        plot.title = element_text(face = "bold"),
         legend.spacing.x = unit(0.2, 'cm'),
         legend.spacing.y = unit(0.1, 'cm'),
         legend.text = element_text(margin = margin(l = -3)),
         plot.tag.position = c(0.02, 0.99),
-        plot.margin = unit(c(5.5,5.5,5.5,1), "points")
-        # ,
-        # plot.title = element_text(family = "Aptos-Display-Bold"),
-        # axis.title.x = element_text(family = "Aptos-Display-Bold"),
-        # axis.title.y = element_text(family = "Aptos-Display-Bold"),
-        # plot.tag = element_text(family = "Aptos-Display-Bold")
-        )
+        plot.margin = unit(c(5.5,5.5,5.5,1), "points"),
+        plot.tag = element_text(face = "bold") ) +     
+  add_phylopic(img = img, x = 4.8, y = 3.7, height = 0.7)
 ```
 
-Based on 42 species
+Based on 41 species
 
 # Figure 2 - inter-individual variability
 
@@ -225,8 +229,16 @@ dat.FigB[!duplicated(dat.FigB$species) & is.na(dat.FigB$X6.2_TrophicLevel),"spec
 dat.FigB <- dat.FigB |> 
   mutate(common_name = Hmisc::capitalize(common_name))
 
+library(ggtext)
+
+dat.FigB <-
+  dat.FigB |> 
+  mutate(
+    BoldLabel = str_starts(common_name, "Mu"),
+    common_name_label = if_else(BoldLabel, glue::glue("**{common_name}**"), glue::glue("{common_name}")))
+
 FigB <- 
-  ggplot(dat.FigB, aes(x = d24h.mean, y = reorder(common_name, species.medD24h))) + 
+  ggplot(dat.FigB, aes(x = d24h.mean, y = reorder(common_name_label, species.medD24h))) + 
   geom_density_ridges(aes(fill = factor(X6.2_TrophicLevel)),quantile_lines = T, 
                       quantiles = 2,  
                       color = NA, vline_color = "white", 
@@ -241,28 +253,82 @@ FigB <-
   scale_fill_manual(values=cols,name="",labels = c("Herbivore", "Omnivore","Carnivore")) + 
   scale_x_continuous(limits =c(0, 17), expand=c(0,0))+  
   theme_bw(base_size = 11, base_family = "Avenir") +
-    theme(legend.position = c(0.8, 0.15),
+    theme(legend.position = c(0.8, 0.2),
         legend.background = element_rect(fill="transparent", color = NA),
         legend.key = element_rect(colour = "transparent", fill = "transparent"),
         legend.box = "none",
-        axis.title.y = element_blank()) +
-  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
-      theme(plot.margin = unit(c(5.5,5.5,5.5,1), "points"),
-        plot.tag.position = c(0.02, 0.99)
-        # ,plot.title = element_text(family = "Aptos-Display-Bold"),
-        #  axis.title.x = element_text(family = "Aptos-Display-Bold"),
-        #  plot.tag = element_text(family = "Aptos-Display-Bold")
-        )
+        plot.title = element_text(face = "bold"),
+        axis.title.y = element_blank(),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        plot.margin = unit(c(5.5,5.5,5.5,1), "points"),
+        plot.tag.position = c(0.02, 0.99),
+        plot.tag = element_text(face = "bold"),
+        axis.text.y = ggtext::element_markdown()) +   
+  add_phylopic(img = img, x = 14, y = 12, height = 1)
 ```
 
-# Figure 3 - reaction norm
+
+# Figure 3 - interindividual
+
+```{r}
+MoveTrait.v0.1.sp <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20251011.rds"))
+```
+
+```{r}
+d24h.raw <- MoveTrait.v0.1_spatial |> 
+  unnest(displ.24h) |> 
+  dplyr::select("individual_id","species","common_name",
+                "d24h","t_","x_","y_","contact_person_name","source") |> 
+  rename(x = x_)|> 
+  rename(y = y_)
+
+mule <- d24h.raw[d24h.raw$common_name %in% "mule deer",]
+
+tr <- mule |>
+  group_by(individual_id) |>
+  mutate(d24h = d24h/1000) |>
+  filter(n() >= 55) |>
+  mutate(ind.medD24h=median(d24h)) |>
+  ungroup() |>
+  filter(individual_id %in% c("MD18F0424_Odocoileus hemionus","MD18F0518_Odocoileus hemionus",
+                              "MD16F0053_Odocoileus hemionus", "MD19F0059_Odocoileus hemionus",
+                              "MD17F0220_Odocoileus hemionus"))
+
+FigC <- 
+ggplot(tr, aes(x = d24h , y = fct_reorder(individual_id, ind.medD24h))) + 
+  geom_density_ridges(fill = "#228833" ,quantile_lines = T, 
+                      quantiles = 2,  
+                      color = NA, vline_color = "white", 
+                      jittered_points = TRUE,
+                      position = position_points_jitter(width = 0.05, height = 0),
+                      point_shape = '|', point_size = 1.5, point_alpha = 1, alpha = 0.7,
+                      point_color ="black", rel_min_height = 0.01, )+
+  labs(x = "Daily displacement (km)",
+        y = "Individual",
+        title = "Within-individual level",
+       tag = "C") +
+    theme_bw(base_size = 11, base_family = "Avenir") +
+    theme(legend.position = c(0.8, 0.15),
+        legend.background = element_rect(fill="transparent", color = NA),
+        plot.title = element_text(face = "bold"),
+        legend.key = element_rect(colour = "transparent", fill = "transparent"),
+        legend.box = "none",axis.text.y = element_blank(),
+        panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        plot.margin = unit(c(5.5,5.5,5.5,1), "points"), plot.tag.position = c(0.02, 0.99),
+        plot.tag = element_text(face = "bold"))+
+  add_phylopic(img = img, x = 4.2, y = 2, height = 0.5)
+
+```
+
+
+# Figure 4 - reaction norm
 
 This needs to be developed a lot more!!!! Any ideas welcome - I was thinking along the lines of showing movement over a temporal gradient, essentially depicting migratory patterns - but not so easy. Any other ideas? Could also try other movement metrics - e.g. max displacement over 7 days??
 
 Would be cool to include a temperature gradient.
 
 ```{r}
-MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250311.rds"))
+MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20251011.rds"))
 ```
 
 ```{r,echo=F}
@@ -414,9 +480,9 @@ prd$d24h <- predict(model1,prd)
 
 ```
 
-Plot Reaction norm Panel C
+Plot Reaction norm Panel CD
 ```{r,fig.showtext = TRUE}
-FigC <-
+FigD <-
 ggplot(data      = mule.high.hfi,
        aes(x     = hfi,
            y     = d24h/1000,
@@ -435,20 +501,23 @@ ggplot(data      = mule.high.hfi,
   #scale_y_continuous(expand=c(0.01,0.01))+
   labs(x = "Human Footprint Index",
        y = "Daily displacement (km)",
-       title = "Within-individual level",
-        tag = "C") +
+       title = "Behavioral reaction norm",
+        tag = "D") +
   theme_bw(base_size = 11, base_family = "Avenir") +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
   theme(legend.position = c(.75,.85),
         legend.background = element_blank(),
+        plot.title = element_text(face = "bold"),
         #axis.title.y = element_text(vjust = -2),
         plot.tag.position = c(0.02, 0.99),
-        plot.margin = unit(c(5.5,5.5,5.5,1), "points")
+        plot.margin = unit(c(5.5,5.5,5.5,1), "points"),
         # ,plot.title = element_text(family = "Aptos-Display-Bold"),
         #  axis.title.x = element_text(family = "Aptos-Display-Bold"),
         #  axis.title.y = element_text(family = "Aptos-Display-Bold"),
-        #  plot.tag = element_text(family = "Aptos-Display-Bold")
-        )
+        plot.tag = element_text(face = "bold")
+        ) +
+    add_phylopic(img = img, x = 16, y = 4, height = 0.5)
+
 
 ```
 
@@ -456,8 +525,11 @@ ggplot(data      = mule.high.hfi,
 ```{r}
 library(patchwork)
 
-((FigA / FigC ) | FigB) 
-ggsave("OUTPUT/Fig_ProofConcept.png", width = 19, height = 19, units = "cm")
+(free(FigA, type = "label")  / (FigB | (FigC / FigD))) +
+  plot_layout(heights = unit(c(1, 2), c('null')))
+
+
+ggsave("OUTPUT/Fig_ProofConcept.png", width = 19, height = 25, units = "cm",dpi = 1200)
 ```
 
 
@@ -481,7 +553,7 @@ avonet.trophic <- rbind(avonet.bt[,c("Species3","Trophic.Level")],avonet.eb[,c("
 avonet.trophic <- avonet.trophic[!duplicated(avonet.trophic$Species3),]
 ```
 
-74 species
+72 species
 
 ```{r,echo=F,warning=FALSE,message=FALSE,fig.showtext = TRUE}
 cols2 <- c("Herbivore" = "#228833", "Scavenger" = "#CCBB44", "Carnivore" = "#AA3377")
@@ -511,36 +583,31 @@ FigSA <-
             size = 1.8, position = position_dodge(width = 1),
             vjust = -1,hjust = 0.5) +
   labs(x="Hand-wing Index",y="Mean hourly displacement (km)",tag="A", title = "Species level")+
-    geom_text(x = 30, y = 12, size = 3.5,
-            label = expression(R^2 ~ "< 0.01")) +
+    geom_text(x = 30, y = 7, size = 3.5,
+            label = expression(R^2 ~ "= 0.08")) +
   theme_bw(base_size = 11, base_family = "Avenir") +
   theme(legend.position = "bottom",
         legend.title=element_blank()) +
   scale_color_manual(values=cols2, 
                      name="", 
                      breaks = c("Herbivore", "Scavenger","Carnivore"))+
-  theme(legend.position = c(0.8, 0.9),
+  theme(legend.position = c(0.2, 0.9),
         legend.background = element_rect(fill="transparent"),
         legend.key = element_rect(colour = "transparent", fill = "transparent"),
         legend.title=element_text(size=10)) +
   scale_x_continuous(limits = c(22.5, 70),expand = c(0,0)) +
-  scale_y_continuous(limits = c(0, 60),expand = c(0.01,0.01)) +
+  scale_y_continuous(limits = c(0, 22),expand = c(0.01,0.01)) +
   guides(color = guide_legend(byrow = TRUE)) +
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         legend.spacing.y = unit(5, "cm"),
         legend.text = element_text(margin = margin(l = -3)),
         plot.tag.position = c(0.02, 0.99),
         plot.margin = unit(c(5.5,5.5,5.5,1), "points")) 
-  # +theme(plot.title = element_text(family = "Aptos-Display-Bold"),
-  #        axis.title.x = element_text(family = "Aptos-Display-Bold"),
-  #        axis.title.y = element_text(family = "Aptos-Display-Bold"),
-  #        plot.tag = element_text(family = "Aptos-Display-Bold"))
-
 ```
 
 ## 24hr displacement distance
 
-49 species
+46 species
 
 ```{r,echo=F,warning=FALSE,message=FALSE,fig.showtext = TRUE}
 FigSB <- 
@@ -571,10 +638,10 @@ FigSB <-
        tag="B") +
   theme_minimal() +
   geom_vline(xintercept=0) + 
-  scale_x_continuous(limits =c(0, 420), expand=c(0,0))+
+  scale_x_continuous(limits =c(0, 300), expand=c(0,0))+
   scale_fill_manual(values=cols2, name="", breaks = c("Herbivore", "Scavenger","Carnivore"))+
   theme_bw(base_size = 11, base_family = "Avenir") +
-    theme(legend.position = c(0.8, 0.1),
+    theme(legend.position = c(0.7, 0.2),
         legend.background = element_rect(fill="transparent", color = NA),
         legend.key = element_rect(colour = "transparent", fill = "transparent"),
         legend.box = "none",
@@ -583,9 +650,6 @@ FigSB <-
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
         plot.tag.position = c(0.02, 0.99),
         plot.margin = unit(c(5.5,5.5,5.5,1), "points")
-         # plot.title = element_text(family = "Aptos-Display-Bold"),
-         # axis.title.x = element_text(family = "Aptos-Display-Bold"),
-         # plot.tag = element_text(family = "Aptos-Display-Bold")
         )
 
 ```
@@ -593,7 +657,7 @@ FigSB <-
 ## Monthly Intensity of use of raptors
 
 ```{r,echo=F}
-MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20250311.rds"))
+MoveTrait.v0.1_spatial <- readRDS(paste0(pathTOfolder,"MoveTrait.v0.1_withinindividual_20251011.rds"))
 
 IoU.1m.raw <- MoveTrait.v0.1_spatial |>
   unnest(iou.1m)|> 
@@ -636,11 +700,6 @@ FigSC <-
         legend.background = element_rect(fill = NA),
         plot.tag.position = c(0.02, 0.99),
         plot.margin = unit(c(5.5,5.5,5.5,1), "points"))
-
-         # plot.title = element_text(family = "Aptos-Display-Bold"),
-         # axis.title.x = element_text(family = "Aptos-Display-Bold"),
-         # axis.title.y = element_text(family = "Aptos-Display-Bold"),
-         # plot.tag = element_text(family = "Aptos-Display-Bold")
 ```
 
 # Final SupplementaryFigure
