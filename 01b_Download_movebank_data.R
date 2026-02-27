@@ -20,8 +20,6 @@ library(R.utils)
 
 # specify account to use in the R session
 # keyring::key_list()
-# movebank_store_credentials(username = "MoveTraits",
-#                            password = "ehk7jwYDUJnRAlODazOvrp1B")
 # 
 # options("move2_movebank_key_name" = "MoveTraits")
 options("move2_movebank_key_name" = "movebank")
