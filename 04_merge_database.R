@@ -21,7 +21,7 @@ library(adehabitatHR); library(move2); library(epitools); library(suncalc); libr
 pathTOfolder <- "./DATA/MoveTraitsData/"
 
 #dir for individual summaries
-pthtraitsum <- paste0(pathTOfolder,"5.MB_indv_traitsum/")
+pthtraitsum <- paste0(pathTOfolder,"6.MB_indv_traitsum/")
 
 flsTS <- list.files(pthtraitsum, full.names = T)
 
@@ -179,9 +179,9 @@ MoveTrait.v0.1 |> group_by(class) |>  tally()
 #1777 tucker, 4574 movebank
 MoveTrait.v0.1 |> group_by(source) |>  tally()
 
-dir.create(paste0(pathTOfolder,"7.MoveTraits_db"))
-pthdb <- paste0(pathTOfolder,"7.MoveTraits_db/")
-saveRDS(MoveTrait.v0.1, file=paste0(pthdb,"MoveTrait.v0.1_individual.sum_20250311.rds"))
+dir.create(paste0(pathTOfolder,"8.MoveTraits_db"))
+pthdb <- paste0(pathTOfolder,"8.MoveTraits_db/")
+saveRDS(MoveTrait.v0.1, file=paste0(pthdb,"MoveTrait.v0.1_individual.sum_20251011.rds"))
 
 ## ----Species level Database-------------------------------------------------------------
 
@@ -238,12 +238,12 @@ MoveTrait.v0.1.sp2 <-
   distinct()
 
 
-saveRDS(MoveTrait.v0.1.sp2, file=paste0(pthdb,"MoveTrait.v0.1_species.sum_20250311.rds"))
+saveRDS(MoveTrait.v0.1.sp2, file=paste0(pthdb,"MoveTrait.v0.1_species.sum_20251011.rds"))
 
 ## ----Save within-individual level Database-------------------------------------------------------------
 
 #dir for individual underlying traits
-pthtrait <- paste0(pathTOfolder,"6.MB_indv_trait/")
+pthtrait <- paste0(pathTOfolder,"7.MB_indv_trait/")
 
 flsTS <- list.files(pthtrait, full.names = T)
 
@@ -319,9 +319,9 @@ db.movebank.4 <- db.movebank.4 |>
 
 #nrow(db.movebank.4) == nrow(db.movebank.3)  
 
-# 4560 individuals
+# 4108 individuals
 dim(db.movebank.4)
-# 243 studies
+# 213 studies
 length(unique(db.movebank.4$study_id))
 
 ## ----Merge Tucker data-------------------------------------------------------------
@@ -379,5 +379,5 @@ MoveTrait.v0.1.spatial.2 |> tally()
 MoveTrait.v0.1.spatial.2 |> group_by(class) |>  tally()
 MoveTrait.v0.1.spatial.2 |> group_by(source) |>  tally()
 
-pthdb <- paste0(pathTOfolder,"7.MoveTraits_db/")
-saveRDS(MoveTrait.v0.1.spatial.2, file=paste0(pthdb,"MoveTrait.v0.1_withinindividual_20250311.rds"))
+pthdb <- paste0(pathTOfolder,"8.MoveTraits_db/")
+saveRDS(MoveTrait.v0.1.spatial.2, file=paste0(pthdb,"MoveTrait.v0.1_withinindividual_20251011.rds"))

@@ -10,14 +10,16 @@ library(adehabitatHR); library(move2); library(epitools); library(suncalc); libr
 ## ----Import movement data per individual-------------------------------------------------------------
 pathTOfolder <- "./DATA/MoveTraitsData/"
 
-pthamt1h <- paste0(pathTOfolder,"4.MB_indv_amt_1h/")
+#pthamt1h <- paste0(pathTOfolder,"4.MB_indv_amt_1h/")
+pthamt1h <- paste0(pathTOfolder,"5.MB_indv_amt_1h_outlspeed/")
 
 #dir for individual summaries
-dir.create(paste0(pathTOfolder,"5.MB_indv_traitsum"))
-pthtraitsum <- paste0(pathTOfolder,"5.MB_indv_traitsum/")
+dir.create(paste0(pathTOfolder,"6.MB_indv_traitsum"))
+pthtraitsum <- paste0(pathTOfolder,"6.MB_indv_traitsum/")
+
 #dir for individual underlying traits
-dir.create(paste0(pathTOfolder,"6.MB_indv_trait"))
-pthtrait <- paste0(pathTOfolder,"6.MB_indv_trait/")
+dir.create(paste0(pathTOfolder,"7.MB_indv_trait"))
+pthtrait <- paste0(pathTOfolder,"7.MB_indv_trait/")
 
 
 flsMV <- list.files(pthamt1h, full.names = F)
@@ -27,11 +29,12 @@ flsMV <- list.files(pthamt1h, full.names = F)
 referenceTableStudies <- readRDS(paste0(pathTOfolder,"/referenceTableStudies_ALL_excludedColumn.rds"))
 referenceTableStudiesUsed <- referenceTableStudies[referenceTableStudies$excluded=="no",]
 
-flsMV <- flsMV[flsMV %in% referenceTableStudiesUsed$fileName]
+#flsMV <- flsMV[flsMV %in% referenceTableStudiesUsed$fileName]
 
 lapply(flsMV, function(indPth)
   {
-animlocs.1hourly <- readRDS(paste0(pthamt1h,indPth))
+  #indPth <- flsMV[[1]]
+  animlocs.1hourly <- readRDS(paste0(pthamt1h,indPth))
 
 ## ----Resample data-------------------------------------------------------------
 #Resample data to 24h, 7 week time scales using amt
@@ -73,7 +76,7 @@ data_resampled <- animlocs.1hourly %>%
 ## ----Movement metrics-------------------------------------------------------------
 ## ----1h displacement-------------------------------------------------------------
 animlocs.1hourly_sl <- 
-  animlocs.1hourly |> filter(n() > 167) %>% 
+  animlocs.1hourly %>% 
   mutate(d1h = step_lengths(.)*100000) |> 
   mutate(time_diff = as.numeric(difftime(lead(t_),t_, units = "mins"))) |> 
   filter(time_diff >= 45 & time_diff <= 75) |> 
@@ -81,7 +84,7 @@ animlocs.1hourly_sl <-
   mutate(ymd = as.character(format(as.Date(t_), "%Y-%m-%d"))) |> 
   filter(!is.na(d1h))
 
-animlocs.1hourly_sl <-  if(nrow(animlocs.1hourly_sl)==0) NULL else {animlocs.1hourly_sl}
+animlocs.1hourly_sl <-  if(nrow(animlocs.1hourly_sl)<167) NULL else {animlocs.1hourly_sl}
 
 ## ----Maximum 24hr displacement-------------------------------------------------------------
 locs1h <- animlocs.1hourly %>% 
@@ -125,8 +128,7 @@ dmax24 <- if(is.null(dmax24)) NULL else
 rm(mean.coord)
 
 ## ----24hr displacement distance-------------------------------------------------------------
-animlocs.daily_sl <- animlocs.daily |> 
-  filter(n() > 30) %>% 
+animlocs.daily_sl <- animlocs.daily %>% 
   mutate(d24h = step_lengths(.)*100000) |> 
   mutate(time_diff = as.numeric(difftime(lead(t_),t_, units = "hours"))) |> 
   filter(time_diff >= 20 & time_diff <= 28) |> 
@@ -136,7 +138,7 @@ animlocs.daily_sl <- animlocs.daily |>
          year = lubridate::year(t_))|> 
   filter(!is.na(d24h))
 
-animlocs.daily_sl <-  if(nrow(animlocs.daily_sl)==0) NULL else {animlocs.daily_sl}
+animlocs.daily_sl <-  if(nrow(animlocs.daily_sl)<30) NULL else {animlocs.daily_sl}
   
 ## ----Maximum 7day displacement distance-------------------------------------------------------------
 locs24h <- flatten(data_resampled[,"animlocs.daily"]) |> bind_rows() |> tibble() |> 
